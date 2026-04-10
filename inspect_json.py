@@ -19,11 +19,12 @@ def extract_unique_paths_and_depth(data, current_path="", paths=None, current_de
         for key, value in data.items():
             new_path = f"{current_path}.{key}" if current_path else key
             paths.add(new_path)
-            d = extract_unique_paths_and_depth(value, new_path, paths, current_depth + 1)
+            # 재귀 호출의 반환값 중 깊이 값만 분리해서 비교
+            _, d = extract_unique_paths_and_depth(value, new_path, paths, current_depth + 1)
             max_d = max(max_d, d)
     elif isinstance(data, list):
         for item in data:
-            d = extract_unique_paths_and_depth(item, current_path, paths, current_depth)
+            _, d = extract_unique_paths_and_depth(item, current_path, paths, current_depth)
             max_d = max(max_d, d)
     
     return paths, max_d
