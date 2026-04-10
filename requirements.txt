@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+requests
+xmltodict
+pandas
+openpyxl
+pydantic
+pydantic-settings
+python-dotenv
+typer
+pytest
+jinja2
+python-multipart
