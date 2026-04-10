@@ -4,31 +4,34 @@ from rich.console import Console
 from rich.tree import Tree
 from rich.table import Table
 from pathlib import Path
+import argparse
 
 console = Console()
 
-def extract_unique_paths(data, current_path="", paths=None):
-    """JSON에서 중복을 제거한 모든 키 경로를 추출"""
+def extract_unique_paths_and_depth(data, current_path="", paths=None, current_depth=0):
+    """JSON에서 중복을 제거한 모든 키 경로와 최대 깊이 추출"""
     if paths is None:
         paths = set()
+    
+    max_d = current_depth
 
     if isinstance(data, dict):
         for key, value in data.items():
             new_path = f"{current_path}.{key}" if current_path else key
             paths.add(new_path)
-            extract_unique_paths(value, new_path, paths)
+            d = extract_unique_paths_and_depth(value, new_path, paths, current_depth + 1)
+            max_d = max(max_d, d)
     elif isinstance(data, list):
-        # 리스트의 경우 내부 요소들의 구조가 다양할 수 있으므로 
-        # 모든 요소를 탐색하되 중복된 경로는 set으로 자동 제거됨
         for item in data:
-            extract_unique_paths(item, current_path, paths)
+            d = extract_unique_paths_and_depth(item, current_path, paths, current_depth)
+            max_d = max(max_d, d)
     
-    return paths
+    return paths, max_d
 
-def build_unique_tree(paths):
+def build_unique_tree(paths, tree_title="Unique Schema Structure"):
     """추출된 고유 경로들을 다시 Tree 구조로 변환"""
     sorted_paths = sorted(list(paths))
-    root_tree = Tree("[bold yellow]Unique Schema Structure[/bold yellow]")
+    root_tree = Tree(f"[bold yellow]{tree_title}[/bold yellow]")
     nodes = {"": root_tree}
 
     for path in sorted_paths:
@@ -43,15 +46,31 @@ def build_unique_tree(paths):
     
     return root_tree
 
-def inspect_json(file_path: str):
-    path = Path(file_path)
+def save_to_file(output_path, filename, unique_paths, max_depth):
+    """분석 결과를 텍스트 파일로 저장 (Value 제외)"""
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(f"JSON Schema Analysis Report: {filename}\n")
+        f.write("="*50 + "\n")
+        f.write(f"Total Unique Paths: {len(unique_paths)}\n")
+        f.write(f"Maximum Depth: {max_depth}\n")
+        f.write("="*50 + "\n\n")
+        
+        f.write("--- Unique Property Paths ---\n")
+        for p in sorted(list(unique_paths)):
+            f.write(f"{p}\n")
+
+def main():
+    parser = argparse.ArgumentParser(description="Fast JSON Schema Inspector (Keys only)")
+    parser.add_argument("file", help="Path to the JSON file to inspect")
+    parser.add_argument("-o", "--output", help="Path to save the analysis report (.txt)")
+    args = parser.parse_args()
+
+    path = Path(args.file)
     if not path.exists():
-        console.print(f"[bold red]파일을 찾을 수 없습니다:[/bold red] {file_path}")
+        console.print(f"[bold red]파일을 찾을 수 없습니다:[/bold red] {args.file}")
         return
 
     try:
-        # 파일 전체를 읽지 않고 스트리밍 방식으로 처리하면 더 좋으나, 
-        # 일단 로드 속도보다는 분석 속도 최적화에 집중
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
@@ -60,31 +79,26 @@ def inspect_json(file_path: str):
 
     console.rule(f"[bold blue]Fast Schema Inspector: {path.name}[/bold blue]")
     
-    # 1. 고유 경로 추출 (값 제외)
-    with console.status("[bold green]Unique 키 경로 추출 중..."):
-        unique_paths = extract_unique_paths(data)
+    # 1. 고유 경로 및 깊이 추출
+    with console.status("[bold green]Unique 키 구조 및 깊이 분석 중..."):
+        unique_paths, max_depth = extract_unique_paths_and_depth(data)
     
-    # 2. 트리 시각화 (중복 제거된 구조)
-    console.print(build_unique_tree(unique_paths))
+    # 2. 트리 시각화
+    console.print(build_unique_tree(unique_paths, tree_title=f"Schema Tree (Max Depth: {max_depth})"))
 
-    # 3. 경로 리스트 요약
-    console.rule("[bold blue]Summary[/bold blue]")
-    table = Table(show_header=True, header_style="bold cyan")
-    table.add_column("Property Path (Keys Only)", style="dim")
-    
-    # 너무 많을 수 있으므로 정렬된 상위 50개 정도만 예시로 보여주거나 전체 출력 선택
-    sorted_paths = sorted(list(unique_paths))
-    for p in sorted_paths[:100]: # 일단 100개까지만 테이블 출력
-        table.add_row(p)
-    
-    console.print(table)
-    if len(sorted_paths) > 100:
-        console.print(f"... and {len(sorted_paths) - 100} more paths.")
-        
-    console.print(f"\n[bold yellow]Total unique attribute paths found:[/bold yellow] {len(unique_paths)}")
+    # 3. 요약 정보
+    console.rule("[bold blue]Analysis Summary[/bold blue]")
+    console.print(f"Total Unique Paths: [bold cyan]{len(unique_paths)}[/bold cyan]")
+    console.print(f"Maximum Depth: [bold green]{max_depth}[/bold green]")
+
+    # 4. 파일 저장
+    if args.output:
+        try:
+            save_to_file(args.output, path.name, unique_paths, max_depth)
+            console.print(f"\n[bold green]분석 결과가 저장되었습니다:[/bold green] [cyan]{args.output}[/cyan]")
+            console.print("[dim]이 파일에는 데이터(Value)가 포함되어 있지 않아 안전하게 공유 가능합니다.[/dim]")
+        except Exception as e:
+            console.print(f"[bold red]파일 저장 실패:[/bold red] {str(e)}")
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        console.print("[bold red]사용법:[/bold red] python inspect_json.py <file_path.json>")
-    else:
-        inspect_json(sys.argv[1])
+    main()
