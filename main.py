@@ -5,6 +5,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from app.api import routes
 from app.core.config import settings
+from app.core.database import init_db
+
+# 앱 시작 시 DB 및 테이블 초기화 보장
+init_db()
 
 app = FastAPI(title="Skyhigh Policy Parser API")
 

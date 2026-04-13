@@ -143,3 +143,29 @@ def get_dict_results(query: str, params: tuple = ()):
             return [dict(row) for row in cur.fetchall()]
         except sqlite3.OperationalError:
             return []
+
+def delete_policy_set(set_id: int):
+    with get_connection() as conn:
+        for table in ['policies', 'objects', 'metadata', 'policy_object_mapping']:
+            try: conn.execute(f'DELETE FROM {table} WHERE set_id = ?', (set_id,))
+            except sqlite3.OperationalError: pass
+        conn.execute('DELETE FROM policy_sets WHERE _pk_auto = ?', (set_id,))
+
+def clear_all_history():
+    with get_connection() as conn:
+        for table in ['policies', 'objects', 'metadata', 'policy_sets', 'policy_object_mapping']:
+            try: conn.execute(f'DELETE FROM {table}')
+            except sqlite3.OperationalError: pass
+
+def cleanup_old_sets():
+    with get_connection() as conn:
+        try:
+            cursor = conn.execute('SELECT _pk_auto FROM policy_sets ORDER BY upload_time DESC LIMIT 5')
+            keep_ids = [row[0] for row in cursor.fetchall()]
+            if not keep_ids: return
+            placeholders = ','.join('?' for _ in keep_ids)
+            for table in ['policies', 'objects', 'metadata', 'policy_object_mapping']:
+                try: conn.execute(f'DELETE FROM {table} WHERE set_id NOT IN ({placeholders})', keep_ids)
+                except sqlite3.OperationalError: pass
+            conn.execute(f'DELETE FROM policy_sets WHERE _pk_auto NOT IN ({placeholders})', keep_ids)
+        except sqlite3.OperationalError: pass
