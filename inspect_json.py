@@ -3,62 +3,68 @@ import sys
 from pathlib import Path
 import argparse
 
-def get_unique_schema_hierarchy(data, current_path_list=None, seen_structures=None, depth=0):
+def get_full_schema_hierarchy(data, stack=None, seen_at_depth=None, depth=0):
     """
-    중첩을 제거한 순수 스키마 계층 구조를 추출 (수동 복사 최적화)
-    결과: [(depth, key_name), ...]
+    중첩 구조를 명시하면서 탭 없이 계층을 추출
+    결과: [(depth, key_name, is_recursive), ...]
     """
-    if current_path_list is None:
-        current_path_list = []
-    if seen_structures is None:
-        seen_structures = set()
+    if stack is None:
+        stack = []
+    if seen_at_depth is None:
+        seen_at_depth = set()
 
     hierarchy = []
 
     if isinstance(data, dict):
         for key, value in data.items():
-            # 현재 경로에서 이 키가 나타났는지 확인 (단순 중첩 감지)
-            # path_str은 상위 계층 구조를 포함하여 중복 여부 판단
-            path_str = ".".join(current_path_list + [key])
+            # 현재 경로(stack)에 이미 이 키가 있다면 재귀 발생
+            is_recursive = key in stack
             
-            # 이미 분석한 고유 경로면 스킵 (순수 스키마만 추출)
-            if path_str in seen_structures:
+            # (depth, key, stack_path) 조합으로 이미 기록했는지 확인하여 중복 출력 방지
+            path_id = (depth, key, ".".join(stack))
+            if path_id in seen_at_depth:
                 continue
             
-            seen_structures.add(path_str)
-            hierarchy.append((depth, key))
+            seen_at_depth.add(path_id)
             
-            # 재귀적으로 하위 구조 탐색 (중첩 패턴이면 더 이상 들어가지 않음)
-            if key not in current_path_list:
-                child_hierarchy = get_unique_schema_hierarchy(
-                    value, current_path_list + [key], seen_structures, depth + 1
+            if is_recursive:
+                # 재귀가 발생한 지점을 표시하고, 하위 탐색은 중단 (이미 상위에서 구조가 나왔으므로)
+                hierarchy.append((depth, f"{key} [RECURSIVE]", True))
+            else:
+                hierarchy.append((depth, key, False))
+                # 재귀가 아니면 하위 구조 탐색
+                child_hierarchy = get_full_schema_hierarchy(
+                    value, stack + [key], seen_at_depth, depth + 1
                 )
                 hierarchy.extend(child_hierarchy)
                 
     elif isinstance(data, list) and len(data) > 0:
-        # 리스트는 첫 번째 요소만 샘플로 분석 (스키마 파악용)
-        hierarchy.extend(get_unique_schema_hierarchy(data[0], current_path_list, seen_structures, depth))
+        # 리스트의 경우 모든 요소를 검사하여 발생 가능한 모든 키 구조를 수집
+        for item in data:
+            hierarchy.extend(get_full_schema_hierarchy(item, stack, seen_at_depth, depth))
     
     return hierarchy
 
 def save_manual_friendly_report(output_path, filename, hierarchy):
-    """탭 없이 숫자로 계층을 표시하는 리포트 저장"""
+    """숫자 계층과 재귀 표시가 포함된 리포트 저장"""
     with open(output_path, "w", encoding="utf-8") as f:
-        f.write(f"# JSON SCHEMA MANUAL-COPY REPORT: {filename}\n")
+        f.write(f"# JSON FULL SCHEMA REPORT (Manual-Copy Optimized): {filename}\n")
         f.write(f"# Format: [Depth]: [KeyName]\n")
-        f.write("="*50 + "\n")
+        f.write(f"# [RECURSIVE] indicates the point where a parent key repeats.\n")
+        f.write("="*65 + "\n")
         
-        for depth, key in hierarchy:
-            # 탭이나 들여쓰기 없이 숫자와 콜론으로만 구분
+        for depth, key, _ in hierarchy:
             f.write(f"{depth}: {key}\n")
         
-        f.write("="*50 + "\n")
-        f.write(f"# Total Unique Keys: {len(hierarchy)}\n")
+        f.write("="*65 + "\n")
+        recursive_count = sum(1 for _, _, is_rec in hierarchy if is_rec)
+        f.write(f"# Total Unique Structural Keys: {len(hierarchy)}\n")
+        f.write(f"# Recursive Entry Points Detected: {recursive_count}\n")
 
 def main():
-    parser = argparse.ArgumentParser(description="Manual-Copy Friendly JSON Inspector")
+    parser = argparse.ArgumentParser(description="Full Schema Inspector (Manual-Copy Friendly)")
     parser.add_argument("file", help="Path to the JSON file to inspect")
-    parser.add_argument("-o", "--output", help="Path to save the numbered report (.txt)")
+    parser.add_argument("-o", "--output", help="Path to save the report (.txt)")
     args = parser.parse_args()
 
     path = Path(args.file)
@@ -73,28 +79,27 @@ def main():
         print(f"Error: Failed to load JSON: {str(e)}")
         return
 
-    # 1. 고유 계층 구조 분석
-    print(f"Analyzing structure of {path.name}...")
-    hierarchy = get_unique_schema_hierarchy(data)
+    # 1. 스키마 분석 (재귀 감지 포함)
+    print(f"Analyzing full structure of {path.name}...")
+    hierarchy = get_full_schema_hierarchy(data)
     
     # 2. 터미널 출력 (미리보기)
     print("\n--- Manual-Copy Friendly Preview ---")
-    print("Format: [Depth]: [KeyName]")
-    print("-" * 35)
-    for depth, key in hierarchy[:20]:  # 상위 20개만 출력
+    print("-" * 45)
+    for depth, key, is_rec in hierarchy[:30]:
         print(f"{depth}: {key}")
-    if len(hierarchy) > 20:
-        print(f"... and {len(hierarchy) - 20} more keys.")
+    if len(hierarchy) > 30:
+        print(f"... and {len(hierarchy) - 30} more entries.")
     
-    print("-" * 35)
-    print(f"Total Unique Keys: {len(hierarchy)}")
+    print("-" * 45)
+    print(f"Total Entries: {len(hierarchy)}")
+    print(f"Recursive Points: {sum(1 for _, _, is_rec in hierarchy if is_rec)}")
 
     # 3. 파일 저장
-    output_file = args.output if args.output else "schema_manual.txt"
+    output_file = args.output if args.output else "full_schema_manual.txt"
     try:
         save_manual_friendly_report(output_file, path.name, hierarchy)
-        print(f"\nSuccess: Numbered report saved to '{output_file}'")
-        print("You can now manually copy this list easily from the screen.")
+        print(f"\nSuccess: Full schema report saved to '{output_file}'")
     except Exception as e:
         print(f"Error: Failed to save report: {str(e)}")
 
