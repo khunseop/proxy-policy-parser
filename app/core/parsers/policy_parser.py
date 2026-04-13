@@ -76,16 +76,17 @@ class PolicyParser:
                     action_info = self._parse_actions(obj) if not is_group else {}
                     
                     for idx, cond in enumerate(parsed_conditions):
+                        # 모든 행(idx와 무관)에 전체 정보를 꽉 채움 (데이터 분석 및 UI용)
                         record = {
                             "Type": "Group" if is_group else "Rule",
                             "Level": current_level,
-                            "ID": obj.get("@id") if idx == 0 else "",
-                            "Name": obj.get("@name") if idx == 0 else "",
-                            "Enabled": obj.get("@enabled") if idx == 0 else "",
+                            "ID": obj.get("@id", ""),
+                            "Name": obj.get("@name", ""),
+                            "Enabled": obj.get("@enabled", ""),
                             "Condition": cond.get("expression_text", "Always"),
-                            "Actions": action_info.get("action_summary", "") if idx == 0 else "",
-                            "ActionID": action_info.get("action_id", "") if idx == 0 else "",
-                            "ActionConfigID": action_info.get("action_conf_id", "") if idx == 0 else "",
+                            "Actions": action_info.get("action_summary", ""),
+                            "ActionID": action_info.get("action_id", ""),
+                            "ActionConfigID": action_info.get("action_conf_id", ""),
                             "Path": " > ".join(stack + [current_name] if current_name else stack),
                             "CloudSynced": obj.get("@cloudSynced", ""),
                             "CycleRequest": obj.get("@cycleRequest", ""),
@@ -93,7 +94,7 @@ class PolicyParser:
                             "CycleEmbedded": obj.get("@cycleEmbeddedObject", ""),
                             "DefaultRights": obj.get("@defaultRights", ""),
                             "ACElements": str(obj.get("acElements", "")),
-                            "Description": obj.get("description", "") if idx == 0 else ""
+                            "Description": obj.get("description", "")
                         }
                         
                         # Staircase 컬럼
@@ -128,12 +129,10 @@ class PolicyParser:
         final_records = []
         for rec in self.all_records:
             ordered_rec = {}
-            # L1, L2... 컬럼 먼저 배치
             for i in range(1, self.max_level + 1):
                 col = f"L{i}"
                 ordered_rec[col] = rec.get(col, "")
             
-            # 나머지 핵심 컬럼
             core_fields = ["Type", "Name", "Enabled", "Condition", "Actions", "Path", "ID", 
                            "ActionID", "ActionConfigID", "CloudSynced", "CycleRequest", 
                            "CycleResponse", "CycleEmbedded", "DefaultRights", "ACElements", "Description"]
