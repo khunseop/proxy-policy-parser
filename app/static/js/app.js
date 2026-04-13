@@ -1,6 +1,10 @@
 let currentSetId = null;
+let objectsMap = {}; // list_id -> { name, entries: [] }
 
-window.onload = loadHistory;
+window.onload = () => {
+    loadHistory();
+    initResizer();
+};
 
 // 전역 클릭 시 검색 결과 닫기
 document.addEventListener('click', (e) => {
@@ -9,6 +13,46 @@ document.addEventListener('click', (e) => {
         searchResults.style.display = 'none';
     }
 });
+
+function initResizer() {
+    const resizer = document.getElementById('drag-resizer');
+    const panel = document.getElementById('detail-view');
+    let isResizing = false;
+
+    resizer.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        document.body.style.cursor = 'col-resize';
+        resizer.classList.add('resizing');
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const width = window.innerWidth - e.clientX;
+        if (width > 300 && width < 800) {
+            panel.style.width = `${width}px`;
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        isResizing = false;
+        document.body.style.cursor = 'default';
+        resizer.classList.remove('resizing');
+    });
+}
+
+function closeDetailView() {
+    const panel = document.getElementById('detail-view');
+    panel.style.display = 'none';
+    const resizer = document.getElementById('drag-resizer');
+    resizer.style.display = 'none';
+}
+
+function openDetailView() {
+    const panel = document.getElementById('detail-view');
+    panel.style.display = 'flex';
+    const resizer = document.getElementById('drag-resizer');
+    resizer.style.display = 'block';
+}
 
 async function loadHistory() {
     try {
@@ -27,6 +71,32 @@ async function loadHistory() {
     }
 }
 
+async function loadObjects(set_id) {
+    try {
+        const response = await fetch(`/api/v1/objects/${set_id}`);
+        const objects = await response.json();
+        objectsMap = {};
+        objects.forEach(obj => {
+            const id = obj.list_id;
+            if (!objectsMap[id]) {
+                objectsMap[id] = {
+                    name: obj.list_name,
+                    type: obj.list_type_id,
+                    entries: []
+                };
+            }
+            if (obj.entry_value) {
+                objectsMap[id].entries.push({
+                    value: obj.entry_value,
+                    type: obj.entry_type || 'default'
+                });
+            }
+        });
+    } catch (err) {
+        console.error("객체 데이터 로드 실패:", err);
+    }
+}
+
 async function handleSetChange() {
     currentSetId = document.getElementById('history-select').value;
     const treeContainer = document.getElementById('tree-container');
@@ -35,8 +105,11 @@ async function handleSetChange() {
     if (!currentSetId) {
         treeContainer.innerHTML = '<div class="loading" style="padding: 20px;">정책을 선택하거나 업로드하세요.</div>';
         detailContent.innerHTML = '<div class="empty-state" style="text-align:center; color:#999; margin-top:50px;">항목을 선택하여 상세 내용을 확인하세요.</div>';
+        objectsMap = {};
         return;
     }
+    
+    await loadObjects(currentSetId);
     initFinder();
 }
 
@@ -90,6 +163,8 @@ async function handleFileUpload() {
         currentSetId = result.set_id;
         await loadHistory();
         document.getElementById('history-select').value = currentSetId;
+        
+        await loadObjects(currentSetId);
         initFinder();
         document.getElementById('status-msg').innerText = "업로드 완료";
     } catch (err) {
@@ -123,7 +198,7 @@ async function addColumn(parentPath, colIndex) {
         colDiv.innerHTML = ''; 
 
         if (nodes.length === 0) {
-            colDiv.innerHTML = '<div style="padding:10px; color:#ccc; font-style:italic;">하위 항목 없음</div>';
+            colDiv.innerHTML = '<div style="padding:20px; color:#ccc; font-style:italic; text-align:center; font-size:12px;">하위 항목 없음</div>';
             return;
         }
 
@@ -133,14 +208,14 @@ async function addColumn(parentPath, colIndex) {
             const icon = node.Type === 'Group' ? '📁' : '📄';
             item.innerHTML = `
                 <span class="icon">${icon}</span>
-                <span class="name">${node.Name || 'Unnamed'}</span>
+                <span class="name" title="${node.Name}">${node.Name || 'Unnamed'}</span>
                 ${node.Type === 'Group' ? '<span class="arrow">▶</span>' : ''}
             `;
 
             item.onclick = (e) => {
                 colDiv.querySelectorAll('.tree-item').forEach(el => el.classList.remove('selected'));
                 item.classList.add('selected');
-                showDetail(node, item);
+                showDetail(node);
                 if (node.Type === 'Group') {
                     addColumn(node.Path, colIndex + 1);
                 } else {
@@ -156,7 +231,55 @@ async function addColumn(parentPath, colIndex) {
     }
 }
 
-function showDetail(item, element) {
+function formatCondition(condition) {
+    if (!condition || condition === 'Always') return 'Always';
+    
+    // List(ID) 패턴을 찾아서 링크로 변환
+    return condition.replace(/List\(([^)]+)\)/g, (match, id) => {
+        const obj = objectsMap[id];
+        if (obj) {
+            return `<span class="list-link" onclick="showObjectDetail('${id}')" title="내용 보기">${obj.name}</span>`;
+        }
+        return match;
+    });
+}
+
+function showObjectDetail(listId) {
+    const obj = objectsMap[listId];
+    if (!obj) return;
+
+    // 기존 상세 정보 아래에 객체 정보 추가하거나 팝업?
+    // 여기서는 간단하게 detail-content에 덮어씌우지 않고 추가 정보를 보여줌
+    const existingObjView = document.getElementById('object-view-container');
+    if (existingObjView) existingObjView.remove();
+
+    const container = document.createElement('div');
+    container.id = 'object-view-container';
+    container.className = 'object-view';
+    container.innerHTML = `
+        <div class="object-view-header">
+            <span>List: ${obj.name} (${obj.type})</span>
+            <button class="btn-icon" style="font-size: 10px; float:right;" onclick="this.parentElement.parentElement.remove()">✕</button>
+        </div>
+        <ul class="object-list">
+            ${obj.entries.map(e => `<li><span>${e.value}</span> <span class="entry-type">${e.type}</span></li>`).join('')}
+            ${obj.entries.length === 0 ? '<li style="color:#999; font-style:italic;">항목 없음</li>' : ''}
+        </ul>
+    `;
+    
+    const detailContainer = document.getElementById('detail-content');
+    // Condition 영역 바로 다음에 삽입 시도
+    const conditionRow = detailContainer.querySelector('.detail-row:nth-child(3)');
+    if (conditionRow) {
+        conditionRow.after(container);
+    } else {
+        detailContainer.appendChild(container);
+    }
+    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function showDetail(item) {
+    openDetailView();
     const container = document.getElementById('detail-content');
     container.innerHTML = `
         <div class="detail-card">
@@ -165,7 +288,7 @@ function showDetail(item, element) {
             
             <div class="detail-row">
                 <span class="label">Condition (조건)</span>
-                <div class="value condition">${item.Condition || 'Always'}</div>
+                <div class="value condition">${formatCondition(item.Condition)}</div>
             </div>
             
             ${item.Type === 'Rule' ? `
@@ -177,22 +300,22 @@ function showDetail(item, element) {
 
             <div class="detail-row">
                 <span class="label">Technical Info</span>
-                <div class="value grid-2" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:12px;">
-                    <div><strong>ID:</strong> ${item.ID}</div>
-                    <div><strong>Cloud:</strong> ${item.CloudSynced || 'False'}</div>
-                    <div><strong>Cycle:</strong> ${item.CycleRequest ? 'Req' : ''} ${item.CycleResponse ? 'Res' : ''}</div>
-                    <div><strong>Rights:</strong> ${item.DefaultRights}</div>
+                <div class="value" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:12px; font-family: sans-serif;">
+                    <div><span style="color:#888">ID:</span> ${item.ID}</div>
+                    <div><span style="color:#888">Cloud:</span> ${item.CloudSynced === 'true' ? 'Yes' : 'No'}</div>
+                    <div><span style="color:#888">Cycle:</span> ${item.CycleRequest === 'true' ? 'Req' : ''} ${item.CycleResponse === 'true' ? 'Res' : ''}</div>
+                    <div><span style="color:#888">Rights:</span> ${item.DefaultRights}</div>
                 </div>
             </div>
 
             <div class="detail-row">
                 <span class="label">ACElements</span>
-                <div class="value" style="font-size:11px; overflow-x:auto;">${item.ACElements}</div>
+                <div class="value" style="font-size:11px; overflow-x:auto; background: #fafafa;">${item.ACElements || 'None'}</div>
             </div>
 
             <div class="detail-row">
                 <span class="label">Description (설명)</span>
-                <div class="value">${item.Description || '-'}</div>
+                <div class="value" style="font-family: sans-serif;">${item.Description || '-'}</div>
             </div>
         </div>
     `;
@@ -228,8 +351,9 @@ async function handleSearch(event) {
                 <div class="path">${item.Path}</div>
             `;
             div.onclick = () => {
-                showDetail(item, null);
+                showDetail(item);
                 resultsOverlay.style.display = 'none';
+                // TODO: 트리를 해당 항목까지 확장하는 기능은 추후 구현
             };
             resultsOverlay.appendChild(div);
         });

@@ -37,9 +37,15 @@
                 <div class="loading" style="padding: 20px;">정책을 선택하거나 업로드하세요.</div>
             </div>
 
+            <!-- Resizer -->
+            <div class="resizer" id="drag-resizer"></div>
+
             <!-- 우측 상세 정보 패널 (고정) -->
             <section class="detail-panel" id="detail-view">
-                <div class="detail-header">상세 정보</div>
+                <div class="detail-header">
+                    <span>상세 정보</span>
+                    <button class="btn-icon" style="font-size: 14px;" onclick="closeDetailView()">✕</button>
+                </div>
                 <div id="detail-content" class="detail-container">
                     <div class="empty-state" style="text-align:center; color:#999; margin-top:50px;">
                         항목을 선택하여 상세 내용을 확인하세요.
