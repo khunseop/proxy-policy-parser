@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Skyhigh Policy Explorer</title>
+    <title>Skyhigh Policy Explorer (DB Mode)</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -11,9 +11,17 @@
         <!-- 상단 네비게이션 및 검색바 -->
         <header class="app-header">
             <div class="logo">Skyhigh Policy Explorer</div>
-            <div class="search-container">
-                <input type="text" id="global-search" placeholder="IP, URL, Rule Name 검색..." onkeyup="handleSearch()">
+            
+            <div class="history-container">
+                <select id="history-select" onchange="handleSetChange()">
+                    <option value="">정책 히스토리 선택...</option>
+                </select>
             </div>
+
+            <div class="search-container">
+                <input type="text" id="global-search" placeholder="IP, URL, Rule Name 검색 (Server-side)..." onkeyup="handleSearch(event)">
+            </div>
+
             <div class="actions">
                 <input type="file" id="xml-upload" accept=".xml" style="display:none;" onchange="handleFileUpload()">
                 <button class="btn primary" onclick="document.getElementById('xml-upload').click()">XML 업로드</button>
@@ -24,9 +32,9 @@
         <main class="app-main">
             <!-- 좌측: 정책 트리 -->
             <aside class="sidebar" id="policy-tree">
-                <div class="tree-header">정책 계층 구조</div>
+                <div class="tree-header">정책 계층 구조 (지연 로딩)</div>
                 <div id="tree-content" class="tree-container">
-                    <div class="loading">XML 파일을 업로드해주세요.</div>
+                    <div class="loading">정책을 선택하거나 새로 업로드해주세요.</div>
                 </div>
             </aside>
 
@@ -42,7 +50,7 @@
         <!-- 하단 상태바 -->
         <footer class="app-footer">
             <span id="status-msg">준비됨</span>
-            <span id="policy-stats">Policies: 0, Objects: 0</span>
+            <span id="policy-stats">Policies: 0 (SQLite DB Mode)</span>
         </footer>
     </div>
 

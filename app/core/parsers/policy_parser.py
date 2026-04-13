@@ -76,7 +76,10 @@ class PolicyParser:
                     action_info = self._parse_actions(obj) if not is_group else {}
                     
                     for idx, cond in enumerate(parsed_conditions):
-                        # 모든 행(idx와 무관)에 전체 정보를 꽉 채움 (데이터 분석 및 UI용)
+                        # DB 지연 로딩을 위해 ParentPath와 Full Path를 정규화하여 저장
+                        parent_path = " > ".join(stack) if stack else ""
+                        full_path = " > ".join(stack + [current_name] if current_name else stack)
+                        
                         record = {
                             "Type": "Group" if is_group else "Rule",
                             "Level": current_level,
@@ -87,7 +90,8 @@ class PolicyParser:
                             "Actions": action_info.get("action_summary", ""),
                             "ActionID": action_info.get("action_id", ""),
                             "ActionConfigID": action_info.get("action_conf_id", ""),
-                            "Path": " > ".join(stack + [current_name] if current_name else stack),
+                            "ParentPath": parent_path,
+                            "Path": full_path,
                             "CloudSynced": obj.get("@cloudSynced", ""),
                             "CycleRequest": obj.get("@cycleRequest", ""),
                             "CycleResponse": obj.get("@cycleResponse", ""),
@@ -97,7 +101,7 @@ class PolicyParser:
                             "Description": obj.get("description", "")
                         }
                         
-                        # Staircase 컬럼
+                        # Staircase 컬럼 (엑셀용)
                         for i in range(1, current_level):
                             record[f"L{i}"] = stack[i-1] if i-1 < len(stack) else ""
                         record[f"L{current_level}"] = current_name
@@ -133,7 +137,8 @@ class PolicyParser:
                 col = f"L{i}"
                 ordered_rec[col] = rec.get(col, "")
             
-            core_fields = ["Type", "Name", "Enabled", "Condition", "Actions", "Path", "ID", 
+            # 핵심 필드에 ParentPath 추가
+            core_fields = ["Type", "Name", "Enabled", "Condition", "Actions", "ParentPath", "Path", "ID", 
                            "ActionID", "ActionConfigID", "CloudSynced", "CycleRequest", 
                            "CycleResponse", "CycleEmbedded", "DefaultRights", "ACElements", "Description"]
             for field in core_fields:
