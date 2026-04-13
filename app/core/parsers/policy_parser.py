@@ -1,16 +1,19 @@
 import json
 import pandas as pd
 import xmltodict
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Optional
 from .condition_parser import ConditionParser
 
 class PolicyParser:
     def __init__(self, source, from_xml: bool = False):
         if from_xml:
             parsed = xmltodict.parse(source)
-            self.data = parsed.get("libraryContent", {}).get("ruleGroup", {})
+            # libraryContent가 None이거나 ruleGroup이 없을 경우를 대비해 안전하게 추출
+            lc = parsed.get("libraryContent") or {}
+            self.data = lc.get("ruleGroup") or {}
         elif isinstance(source, dict):
-            self.data = source.get("libraryContent", {}).get("ruleGroup", {})
+            lc = source.get("libraryContent") or {}
+            self.data = lc.get("ruleGroup") or {}
         else:
             raise ValueError("Invalid data source provided. Must be dict or XML string.")
         
@@ -30,37 +33,43 @@ class PolicyParser:
         
         # 1. 기본 액션 (actionContainer)
         ac = obj.get("actionContainer")
-        if ac:
+        if ac and isinstance(ac, dict):
             action_id = ac.get("@actionId", "UnknownAction")
             actions.append(f"Action: {action_id}")
         
         # 2. 즉시 실행 액션 (immediateActionContainers)
-        iac = obj.get("immediateActionContainers", {})
+        iac = obj.get("immediateActionContainers") or {}
+        if not isinstance(iac, dict):
+            iac = {}
         
         # 2.1 Set Action
         for sac in self._ensure_list(iac.get("setActionContainer")):
-            prop_id = sac.get("@propertyId", "UnknownProperty")
-            # 간단한 값 추출 시도 (ConditionParser의 로직 재사용 가능하나 여기선 약식으로)
-            actions.append(f"Set: {prop_id}")
+            if isinstance(sac, dict):
+                prop_id = sac.get("@propertyId", "UnknownProperty")
+                actions.append(f"Set: {prop_id}")
             
         # 2.2 Execute Action (Procedures)
         for eac in self._ensure_list(iac.get("executeActionContainer")):
-            proc_val = eac.get("procedureValue", {})
-            proc_id = proc_val.get("@procedureId", "UnknownProcedure")
-            actions.append(f"Execute: {proc_id}")
+            if isinstance(eac, dict):
+                proc_val = eac.get("procedureValue", {})
+                proc_id = proc_val.get("@procedureId", "UnknownProcedure")
+                actions.append(f"Execute: {proc_id}")
             
         # 2.3 Enable Engine Action
         for eec in self._ensure_list(iac.get("enableEngineActionContainer")):
-            engine_id = eec.get("@engineId", "UnknownEngine")
-            actions.append(f"EnableEngine: {engine_id}")
+            if isinstance(eec, dict):
+                engine_id = eec.get("@engineId", "UnknownEngine")
+                actions.append(f"EnableEngine: {engine_id}")
             
         return " | ".join(actions) if actions else "None"
 
     def parse_condition(self, condition_dict: dict):
+        if not condition_dict or not isinstance(condition_dict, dict):
+            return []
         try:
             return ConditionParser(condition_dict).to_rows()   # List[Dict]
         except Exception as e:
-            return [{"error": str(e)}]
+            return [{"error": str(e), "expression_text": "Error parsing condition"}]
     
     def parse(self):
         def walk(obj, stack=None):
@@ -71,11 +80,11 @@ class PolicyParser:
                 is_group = "@name" in obj and ("rules" in obj or "ruleGroups" in obj)
                 current_name = obj.get("@name")
             
-                # group 또는 rule 여부와 관계없이 condition이 있으면 파싱
+                # group 또는 rule 여부와 관계없이 파싱 대상인지 확인
                 if is_group or "@name" in obj:
-                    parsed_conditions = self.parse_condition(obj.get("condition", {}))
+                    cond_container = obj.get("condition") or {}
+                    parsed_conditions = self.parse_condition(cond_container)
                     if not parsed_conditions:
-                        # 조건이 없는 경우 기본 행 생성
                         parsed_conditions = [{"expression_text": "Always"}]
                     
                     action_summary = self._parse_actions(obj) if not is_group else None
@@ -107,12 +116,15 @@ class PolicyParser:
                 if is_group and current_name:
                     stack.append(current_name)
                 
-                # 하위 노드 탐색
-                if "ruleGroups" in obj:
-                    for rg in self._ensure_list(obj["ruleGroups"].get("ruleGroup")):
+                # 하위 노드 탐색 (None 체크 강화)
+                rg_container = obj.get("ruleGroups") or {}
+                if isinstance(rg_container, dict):
+                    for rg in self._ensure_list(rg_container.get("ruleGroup")):
                         walk(rg, stack)
-                if "rules" in obj:
-                    for r in self._ensure_list(obj["rules"].get("rule")):
+                
+                r_container = obj.get("rules") or {}
+                if isinstance(r_container, dict):
+                    for r in self._ensure_list(r_container.get("rule")):
                         walk(r, stack)
                 
                 if is_group and current_name:
