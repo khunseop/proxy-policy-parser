@@ -16,6 +16,45 @@ class PolicyParser:
         self.rulegroup_records = []
         self.rule_records = []
 
+    def _ensure_list(self, value: Any) -> List:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    def _parse_actions(self, obj: Dict[str, Any]) -> str:
+        """actionContainer 및 immediateActionContainers 파싱하여 요약 문자열 반환"""
+        actions = []
+        
+        # 1. 기본 액션 (actionContainer)
+        ac = obj.get("actionContainer")
+        if ac:
+            action_id = ac.get("@actionId", "UnknownAction")
+            actions.append(f"Action: {action_id}")
+        
+        # 2. 즉시 실행 액션 (immediateActionContainers)
+        iac = obj.get("immediateActionContainers", {})
+        
+        # 2.1 Set Action
+        for sac in self._ensure_list(iac.get("setActionContainer")):
+            prop_id = sac.get("@propertyId", "UnknownProperty")
+            # 간단한 값 추출 시도 (ConditionParser의 로직 재사용 가능하나 여기선 약식으로)
+            actions.append(f"Set: {prop_id}")
+            
+        # 2.2 Execute Action (Procedures)
+        for eac in self._ensure_list(iac.get("executeActionContainer")):
+            proc_val = eac.get("procedureValue", {})
+            proc_id = proc_val.get("@procedureId", "UnknownProcedure")
+            actions.append(f"Execute: {proc_id}")
+            
+        # 2.3 Enable Engine Action
+        for eec in self._ensure_list(iac.get("enableEngineActionContainer")):
+            engine_id = eec.get("@engineId", "UnknownEngine")
+            actions.append(f"EnableEngine: {engine_id}")
+            
+        return " | ".join(actions) if actions else "None"
+
     def parse_condition(self, condition_dict: dict):
         try:
             return ConditionParser(condition_dict).to_rows()   # List[Dict]
@@ -34,56 +73,46 @@ class PolicyParser:
                 # group 또는 rule 여부와 관계없이 condition이 있으면 파싱
                 if is_group or "@name" in obj:
                     parsed_conditions = self.parse_condition(obj.get("condition", {}))
-                    if not isinstance(parsed_conditions, list):
-                        parsed_conditions = [parsed_conditions]
+                    if not parsed_conditions:
+                        # 조건이 없는 경우 기본 행 생성
+                        parsed_conditions = [{"expression_text": "Always"}]
+                    
+                    action_summary = self._parse_actions(obj) if not is_group else None
                     
                     for idx, cond in enumerate(parsed_conditions):
-                        values = cond.get("property_values")
-                        if isinstance(values, (list, tuple)):
-                            condition_values = ", ".join(values)
-                        elif values is not None:
-                            condition_values = str(values)
-                        else:
-                            condition_values = None
-                        
                         record = {
-                            "id": obj.get("@id") if idx == 0 else None,
-                            "name": obj.get("@name") if idx == 0 else None,
-                            "enabled": obj.get("@enabled") if idx == 0 else None,
-                            "description": obj.get("description") if idx == 0 else None,
-                            "condition_raw": cond,  # 전체 반환 데이터를 저장
-                            "condition_prefix": cond.get("prefix"),
-                            "condition_property": cond.get("property"),
-                            "condition_operator": cond.get("operator"),
-                            "condition_values": condition_values,
-                            "condition_result": cond.get("expression_value"),
+                            "id": obj.get("@id") if idx == 0 else "",
+                            "name": obj.get("@name") if idx == 0 else "",
+                            "enabled": obj.get("@enabled") if idx == 0 else "",
+                            "description": obj.get("description") if idx == 0 else "",
+                            "condition_text": cond.get("expression_text", "Always"),
                             "path": " > ".join(stack + [current_name] if current_name else stack)
                         }
                         if is_group:
                             record.update({
-                                "defaultRights": obj.get("@defaultRights") if idx == 0 else None,
-                                "cycleRequest": obj.get("@cycleRequest") if idx == 0 else None,
-                                "cycleResponse": obj.get("@cycleResponse") if idx == 0 else None,
-                                "cycleEmbeddedObject": obj.get("@cycleEmbeddedObject") if idx == 0 else None,
-                                "cloudSynced": obj.get("@cloudSynced") if idx == 0 else None,
-                                "acElements": str(obj.get("acElements")) if idx == 0 else None,
-                                "type": "group"
+                                "type": "group",
+                                "cloudSynced": obj.get("@cloudSynced"),
+                                "acElements": str(obj.get("acElements")) if idx == 0 else ""
                             })
                             self.rulegroup_records.append(record)
                         else:
                             record.update({
-                                "actionContainer_raw": str(obj.get("actionContainer")) if idx == 0 else None,
-                                "immediateActions_raw": str(obj.get("immediateActionContainers")) if idx == 0 else None,
-                                "group_path": " > ".join(stack) if idx == 0 else None,
-                                "type": "rule"
+                                "type": "rule",
+                                "actions": action_summary if idx == 0 else "",
+                                "group_path": " > ".join(stack) if idx == 0 else ""
                             })
                             self.rule_records.append(record)
                 
                 if is_group and current_name:
                     stack.append(current_name)
                 
-                for k, v in obj.items():
-                    walk(v, stack)
+                # 하위 노드 탐색
+                if "ruleGroups" in obj:
+                    for rg in self._ensure_list(obj["ruleGroups"].get("ruleGroup")):
+                        walk(rg, stack)
+                if "rules" in obj:
+                    for r in self._ensure_list(obj["rules"].get("rule")):
+                        walk(r, stack)
                 
                 if is_group and current_name:
                     stack.pop()

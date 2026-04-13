@@ -42,9 +42,48 @@ python cli.py list-rulesets
 python cli.py parse-local sample.xml --excel output.xlsx
 ```
 
-## 4. Current Progress
-*   [x] Core architecture setup
-*   [x] API & CLI implementation
-*   [x] Initial parsing logic migration
-*   [ ] Refinement of parsing logic for edge cases (In Progress)
-*   [ ] Enhanced visualization for deep JSON structures
+## 4. Detailed Schema Analysis (Air-Gap Report Result)
+The following key structures were identified from the exhaustive schema inspection:
+
+### Root Level (Depth 0-1)
+*   `libraryContent`: Global Root
+    *   `configurations`: Gateway metadata and properties.
+    *   `libraryObject`: Library version and naming.
+    *   `lists`: Global objects (IP, URL, User lists).
+    *   `ruleGroup`: The main policy tree.
+
+### Policy Tree & Rules
+*   **Recursive RuleGroups**: `ruleGroup` can nest infinitely via `ruleGroups`.
+*   **Rules**: Found under `ruleGroup/rules/rule`.
+*   **Actions**:
+    *   `actionContainer`: Primary rule actions (ID, ConfigID).
+    *   `immediateActionContainers`: Side-effects like `setAction`, `executeAction` (Procedures), and `enableEngine`.
+
+### Complex Conditions
+*   **Condition Expressions**: Found under `condition/expressions/conditionExpression`.
+*   **Property Instances**: Highly recursive. A property can have parameters, which can themselves be nested properties.
+*   **Values**: Can be `stringValue`, `listValue` (referencing an ID), or a nested `propertyInstance`.
+
+### Global Lists
+*   Supports `complexEntry` which includes `configurationProperties` and `acElements`, indicating that lists can contain objects, not just strings.
+
+## 5. Completed Refinement (Based on Schema Analysis)
+The following parser enhancements have been implemented to handle the complex Skyhigh SWG schema:
+
+### Stage 1: Action Precision Parsing (Completed)
+*   **PolicyParser Enhancement**: Now extracts detailed actions from `immediateActionContainers`.
+*   Identifies `SetProperty`, `ExecuteProcedure`, and `EnableEngine` actions into human-readable summaries.
+
+### Stage 2: Deep Recursion & Stringifier (Completed)
+*   **ConditionParser Refactor**: Implemented recursive property/value stringification.
+*   Converts Depth 35+ AST structures into readable strings (e.g., `URL.Host(A=B) equals List(ID:123)`).
+*   Prevents context bloat in Excel/JSON by flattening complex logic into a single `condition_text` column.
+
+### Stage 3: Complex List Parsing (Completed)
+*   **ListsParser Refactor**: Added support for `complexEntry` in global lists.
+*   Extracts `configurationProperties` from list entries, supporting metadata attached to list items.
+
+## 6. Next Steps
+*   [ ] **Validation**: Test the refactored parsers with the internal private sample to ensure correctness across all 685 paths.
+*   [ ] **Excel Formatting**: Further improve the multi-sheet Excel output to group related ruleGroups more logically.
+*   [ ] **Web UI Integration**: Start planning the FastAPI-to-React/Angular interface.
