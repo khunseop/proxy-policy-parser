@@ -38,9 +38,38 @@ class ListsParser:
                     
         return props
 
+    def _parse_setup(self, setup_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """list 하위의 setup 정보 (connection, proxy, updateTime) 파싱"""
+        setup_info = {}
+        if not setup_dict or not isinstance(setup_dict, dict):
+            return setup_info
+
+        # 1. Connection
+        conn = setup_dict.get("connection", {})
+        if conn:
+            creds = conn.get("credentials", {})
+            setup_info["setup_conn_user"] = creds.get("username")
+            setup_info["setup_conn_url"] = conn.get("url")
+
+        # 2. Proxy
+        proxy = setup_dict.get("proxy", {})
+        if proxy:
+            creds = proxy.get("credentials", {})
+            setup_info["setup_proxy_user"] = creds.get("username")
+            setup_info["setup_proxy_host"] = proxy.get("host")
+            setup_info["setup_proxy_port"] = proxy.get("port")
+
+        # 3. Update Time
+        utime = setup_dict.get("updateTime", {})
+        if utime:
+            setup_info["setup_update_hourly_minute"] = utime.get("hourly", {}).get("@minute")
+
+        return setup_info
+
     def parse(self):
         # libraryContent -> lists -> entry 구조
-        lists_container = self.data.get("libraryContent", {}).get("lists", {})
+        lc = self.data.get("libraryContent") or {}
+        lists_container = lc.get("lists", {})
         entries = self._ensure_list(lists_container.get("entry", []))
 
         for item in entries:
@@ -50,11 +79,21 @@ class ListsParser:
                 "list_id": list_obj.get("@id"),
                 "list_type_id": list_obj.get("@typeId"),
                 "list_classifier": list_obj.get("@classifier"),
-                "list_description": list_obj.get("description")
+                "list_description": list_obj.get("description"),
+                "list_mwg_version": list_obj.get("@mwg-version")
             }
+
+            # Setup 정보 파싱
+            setup_data = self._parse_setup(list_obj.get("setup", {}))
+            base_info.update(setup_data)
 
             content = list_obj.get("content", {})
             list_entries = self._ensure_list(content.get("listEntry", []))
+
+            # 엔트리가 없는 리스트라도 정보를 남기기 위해 처리
+            if not list_entries:
+                self.lists_records.append(base_info)
+                continue
 
             for entry in list_entries:
                 row = base_info.copy()
@@ -70,7 +109,6 @@ class ListsParser:
                         row["entry_type"] = "complex"
                         row.update(self._parse_complex_entry(ce))
                     else:
-                        # 기타 dict 형태의 엔트리 처리
                         row.update(entry)
                 
                 self.lists_records.append(row)
@@ -79,7 +117,6 @@ class ListsParser:
 
     def to_excel(self, lists_path: str):
         if not self.lists_records:
-            # 데이터가 없을 경우 빈 파일 생성을 피하기 위해 로그 출력 후 중단 가능
             return
         df_lists = pd.DataFrame(self.lists_records)
         df_lists.to_excel(lists_path, index=False, engine="openpyxl")

@@ -1,9 +1,11 @@
 import os
 import logging
+import xmltodict
 from typing import List, Dict, Any, Tuple
 from app.core.skyhigh_client import SkyhighSWGClient
 from app.core.parsers.policy_parser import PolicyParser
 from app.core.parsers.lists_parser import ListsParser
+from app.core.parsers.metadata_parser import MetadataParser
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -46,32 +48,45 @@ class ParserService:
             raise
 
     def _parse_xml(self, xml_content: bytes) -> Dict[str, Any]:
+        # XML을 Dict로 먼저 변환 (메타데이터 및 리스트 파서 공유용)
+        source_dict = xmltodict.parse(xml_content)
+
         # 1. 정책 파싱 (Sequential Flat Table)
         policy_parser = PolicyParser(xml_content, from_xml=True)
         all_rules = policy_parser.parse()
         
-        # 2. 리스트(객체) 파싱
+        # 2. 리스트(객체) 파싱 (Setup 정보 포함)
         lists_parser = ListsParser(xml_content, from_xml=True)
         all_lists = lists_parser.parse()
+
+        # 3. 메타데이터 파싱 (Configuration & Library Object)
+        metadata_parser = MetadataParser(source_dict)
+        meta_data = metadata_parser.parse()
         
         return {
             "policies": all_rules,
             "objects": all_lists,
+            "metadata": meta_data,
             "summary": {
                 "policy_entries_count": len(all_rules),
-                "object_entries_count": len(all_lists)
+                "object_entries_count": len(all_lists),
+                "config_entries_count": len(meta_data["config_details"])
             }
         }
 
     def export_to_excel(self, data: Dict[str, Any], output_path: str):
         import pandas as pd
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-            # 통합된 정책 시트
+            # 1. 통합된 정책 시트
             if data.get('policies'):
                 pd.DataFrame(data['policies']).to_excel(writer, sheet_name='Policies', index=False)
             
-            # 객체(리스트) 시트
+            # 2. 객체(리스트) 시트
             if data.get('objects'):
                 pd.DataFrame(data['objects']).to_excel(writer, sheet_name='Objects', index=False)
+
+            # 3. 메타데이터(설정) 시트
+            if data.get('metadata', {}).get('config_details'):
+                pd.DataFrame(data['metadata']['config_details']).to_excel(writer, sheet_name='Metadata', index=False)
                 
         return output_path
