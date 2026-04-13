@@ -60,7 +60,7 @@ def parse_local(
                 result = await service.parse_from_file(content)
             
             console.print(f"[bold green]파싱 완료![/bold green]")
-            console.print(f"RuleGroups: {result['summary']['rulegroups_count']}, Rules: {result['summary']['rules_count']}")
+            console.print(f"Policies: {result['summary']['policy_entries_count']}, Objects: {result['summary']['object_entries_count']}")
 
             if output_json:
                 with open(output_json, "w", encoding="utf-8") as f:
@@ -77,6 +77,8 @@ def parse_local(
 
         except Exception as e:
             console.print(f"[bold red]파싱 오류:[/bold red] {str(e)}")
+            import traceback
+            console.print(traceback.format_exc())
 
     asyncio.run(run())
 

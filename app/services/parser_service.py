@@ -46,21 +46,32 @@ class ParserService:
             raise
 
     def _parse_xml(self, xml_content: bytes) -> Dict[str, Any]:
-        parser = PolicyParser(xml_content, from_xml=True)
-        rulegroups, rules = parser.parse()
+        # 1. 정책 파싱 (Sequential Flat Table)
+        policy_parser = PolicyParser(xml_content, from_xml=True)
+        all_rules = policy_parser.parse()
+        
+        # 2. 리스트(객체) 파싱
+        lists_parser = ListsParser(xml_content, from_xml=True)
+        all_lists = lists_parser.parse()
         
         return {
-            "rulegroups": rulegroups,
-            "rules": rules,
+            "policies": all_rules,
+            "objects": all_lists,
             "summary": {
-                "rulegroups_count": len(rulegroups),
-                "rules_count": len(rules)
+                "policy_entries_count": len(all_rules),
+                "object_entries_count": len(all_lists)
             }
         }
 
     def export_to_excel(self, data: Dict[str, Any], output_path: str):
         import pandas as pd
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-            pd.DataFrame(data['rulegroups']).to_excel(writer, sheet_name='RuleGroups', index=False)
-            pd.DataFrame(data['rules']).to_excel(writer, sheet_name='Rules', index=False)
+            # 통합된 정책 시트
+            if data.get('policies'):
+                pd.DataFrame(data['policies']).to_excel(writer, sheet_name='Policies', index=False)
+            
+            # 객체(리스트) 시트
+            if data.get('objects'):
+                pd.DataFrame(data['objects']).to_excel(writer, sheet_name='Objects', index=False)
+                
         return output_path
