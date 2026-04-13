@@ -26,7 +26,10 @@ templates = Jinja2Templates(directory=TEMPLATE_DIR)
 @app.get("/")
 async def read_root(request: Request):
     """메인 웹 인터페이스 페이지"""
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(
+        name="index.html", 
+        context={"request": request}
+    )
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
