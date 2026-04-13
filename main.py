@@ -11,13 +11,17 @@ app = FastAPI(title="Skyhigh Policy Parser API")
 # API 라우터 연결
 app.include_router(routes.router, prefix="/api/v1")
 
-# 정적 파일 및 템플릿 설정 (에어갭 대응)
-# 디렉토리가 없으면 생성
-os.makedirs("app/static", exist_ok=True)
-os.makedirs("app/templates", exist_ok=True)
+# 현재 파일의 절대 경로를 기준으로 디렉토리 설정
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "app/static")
+TEMPLATE_DIR = os.path.join(BASE_DIR, "app/templates")
 
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-templates = Jinja2Templates(directory="app/templates")
+# 디렉토리 생성 보장
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(TEMPLATE_DIR, exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 @app.get("/")
 async def read_root(request: Request):
