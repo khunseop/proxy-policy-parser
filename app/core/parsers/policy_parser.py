@@ -92,6 +92,7 @@ class PolicyParser:
                             "CycleResponse": obj.get("@cycleResponse", ""),
                             "CycleEmbedded": obj.get("@cycleEmbeddedObject", ""),
                             "DefaultRights": obj.get("@defaultRights", ""),
+                            "ACElements": str(obj.get("acElements", "")),
                             "Description": obj.get("description", "") if idx == 0 else ""
                         }
                         
@@ -135,7 +136,7 @@ class PolicyParser:
             # 나머지 핵심 컬럼
             core_fields = ["Type", "Name", "Enabled", "Condition", "Actions", "Path", "ID", 
                            "ActionID", "ActionConfigID", "CloudSynced", "CycleRequest", 
-                           "CycleResponse", "CycleEmbedded", "DefaultRights", "Description"]
+                           "CycleResponse", "CycleEmbedded", "DefaultRights", "ACElements", "Description"]
             for field in core_fields:
                 ordered_rec[field] = rec.get(field, "")
             

@@ -1,17 +1,24 @@
-# Project Roadmap
+# 프로젝트 로드맵 (Project Roadmap)
 
-## Phase 1: Data Integration & Refinement (Current)
-- [x] Create core parsers (Policy, Condition, Lists).
-- [ ] Refactor into a unified "Flat Table" structure (Staircase + Path).
-- [ ] Link Rules with actual List contents for deep visibility.
-- [ ] Enhance documentation for developers and users.
+이 로드맵은 Skyhigh SWG 정책 분석 엔진 및 시각화 도구의 단계별 개발 계획입니다.
 
-## Phase 2: Web UI & Visualization
-- [ ] Implement a Tree-View interface using FastAPI and a frontend (React/Angular).
-- [ ] Search functionality: Instantly find rules by IP, URL, or Keyword.
-- [ ] Object Explorer: Click a list name in a rule to jump to its content.
+## 1단계: 데이터 통합 및 정교화 (현재 단계)
+- [x] 핵심 파서 개발 (Policy, Condition, Lists, Metadata).
+- [x] 실행 순서를 보존하는 통합 데이터 구조(Flat Table) 구현.
+- [x] 계단식(Staircase) 엑셀 출력 지원으로 계층 구조 가시화.
+- [x] `FULL_SCHEMA_REPORT.txt` 기반의 모든 기술적 속성(ACElements 등) 추출.
+- [ ] 정책 Rule 내에서 참조하는 List 데이터의 연동 강화 (객체 관계 매핑).
 
-## Phase 3: Advanced Analysis (Policy Diff)
-- [ ] Comparison engine: Compare "Yesterday vs. Today" versions of the policy.
-- [ ] Detailed change report: Identify added/deleted rules and modified conditions/actions.
-- [ ] Shadow Rule Detection: Identify rules that might be overridden by higher-level policies.
+## 2단계: 웹 기반 시각화 및 검색 (Web UI)
+- [ ] **트리 뷰 인터페이스**: FastAPI 서버를 통해 웹 브라우저에서 정책 트리를 탐색.
+- [ ] **통합 검색 기능**: 키워드, IP, URL 등으로 특정 Rule을 즉시 검색.
+- [ ] **객체 탐색기**: 정책에서 리스트 이름을 클릭하면 해당 리스트의 상세 내용(IP/URL 목록)으로 즉시 이동.
+
+## 3단계: 고급 분석 및 변경분 관리 (Policy Diff)
+- [ ] **정책 비교 엔진**: "어제와 오늘의 정책" XML을 비교하여 변경 사항 자동 감지.
+- [ ] **상세 변경 리포트**: 
+    - 추가/삭제된 Rule 및 Group 식별.
+    - 조건식의 세부 수정 사항(활성화 여부, IP 변경 등) 분석.
+- [ ] **그림자 정책(Shadow Rule) 감지**: 상위 정책에 의해 가려져 실행되지 않을 가능성이 있는 정책 식별 (선택 사항).
+- [ ] **정기 백업 및 버전 관리**: 특정 시점의 정책 스냅샷 저장 기능.
+EOF
