@@ -5,7 +5,7 @@ window.onload = loadHistory;
 // 전역 클릭 시 검색 결과 닫기
 document.addEventListener('click', (e) => {
     const searchResults = document.getElementById('search-results');
-    if (!e.target.closest('.search-container')) {
+    if (searchResults && !e.target.closest('.search-container')) {
         searchResults.style.display = 'none';
     }
 });
@@ -29,8 +29,51 @@ async function loadHistory() {
 
 async function handleSetChange() {
     currentSetId = document.getElementById('history-select').value;
-    if (!currentSetId) return;
+    const treeContainer = document.getElementById('tree-container');
+    const detailContent = document.getElementById('detail-content');
+    
+    if (!currentSetId) {
+        treeContainer.innerHTML = '<div class="loading" style="padding: 20px;">정책을 선택하거나 업로드하세요.</div>';
+        detailContent.innerHTML = '<div class="empty-state" style="text-align:center; color:#999; margin-top:50px;">항목을 선택하여 상세 내용을 확인하세요.</div>';
+        return;
+    }
     initFinder();
+}
+
+async function handleDeleteCurrentSet() {
+    const set_id = document.getElementById('history-select').value;
+    if (!set_id) {
+        alert("삭제할 정책 이력을 먼저 선택해주세요.");
+        return;
+    }
+
+    if (!confirm("현재 선택된 정책 이력을 정말 삭제하시겠습니까? 관련 데이터가 모두 삭제됩니다.")) return;
+
+    try {
+        const response = await fetch(`/api/v1/history/${set_id}`, { method: 'DELETE' });
+        if (response.ok) {
+            alert("삭제되었습니다.");
+            await loadHistory();
+            handleSetChange(); // 화면 초기화
+        }
+    } catch (err) {
+        alert("삭제 실패: " + err.message);
+    }
+}
+
+async function handleClearAllHistory() {
+    if (!confirm("모든 정책 히스토리를 초기화하시겠습니까? 복구할 수 없습니다.")) return;
+
+    try {
+        const response = await fetch(`/api/v1/history`, { method: 'DELETE' });
+        if (response.ok) {
+            alert("전체 히스토리가 초기화되었습니다.");
+            await loadHistory();
+            handleSetChange(); // 화면 초기화
+        }
+    } catch (err) {
+        alert("초기화 실패: " + err.message);
+    }
 }
 
 async function handleFileUpload() {
@@ -60,20 +103,13 @@ function initFinder() {
     addColumn("", 0); // Root 컬럼 추가
 }
 
-/**
- * 특정 부모 경로에 대한 새로운 컬럼을 추가합니다.
- * @param {string} parentPath 부모 경로
- * @param {number} colIndex 컬럼 인덱스 (0부터 시작)
- */
 async function addColumn(parentPath, colIndex) {
-    // 1. 현재 인덱스보다 큰 기존 컬럼들 삭제 (macOS Finder 방식)
     const container = document.getElementById('tree-container');
     const existingCols = container.querySelectorAll('.finder-column');
     existingCols.forEach((col, idx) => {
         if (idx >= colIndex) col.remove();
     });
 
-    // 2. 새 컬럼 생성 및 로딩 표시
     const colDiv = document.createElement('div');
     colDiv.className = 'finder-column';
     colDiv.innerHTML = '<div class="loading" style="padding:10px; font-size:12px; color:#999;">로딩 중...</div>';
@@ -84,7 +120,7 @@ async function addColumn(parentPath, colIndex) {
         const response = await fetch(url);
         const nodes = await response.json();
 
-        colDiv.innerHTML = ''; // 로딩 제거
+        colDiv.innerHTML = ''; 
 
         if (nodes.length === 0) {
             colDiv.innerHTML = '<div style="padding:10px; color:#ccc; font-style:italic;">하위 항목 없음</div>';
@@ -102,28 +138,19 @@ async function addColumn(parentPath, colIndex) {
             `;
 
             item.onclick = (e) => {
-                // 선택 표시 업데이트
                 colDiv.querySelectorAll('.tree-item').forEach(el => el.classList.remove('selected'));
                 item.classList.add('selected');
-
-                // 상세 정보 표시
                 showDetail(node, item);
-
-                // 그룹이면 다음 컬럼 로드
                 if (node.Type === 'Group') {
                     addColumn(node.Path, colIndex + 1);
                 } else {
-                    // 파일이면 이후 컬럼 모두 제거
                     const allCols = container.querySelectorAll('.finder-column');
                     allCols.forEach((c, i) => { if (i > colIndex) c.remove(); });
                 }
             };
             colDiv.appendChild(item);
         });
-
-        // 가로 스크롤을 맨 오른쪽으로 이동
         container.scrollTo({ left: container.scrollWidth, behavior: 'smooth' });
-
     } catch (err) {
         colDiv.innerHTML = `<div class="error" style="padding:10px; color:red;">에러: ${err.message}</div>`;
     }
@@ -203,8 +230,6 @@ async function handleSearch(event) {
             div.onclick = () => {
                 showDetail(item, null);
                 resultsOverlay.style.display = 'none';
-                // 검색 결과 클릭 시 해당 경로를 자동으로 찾아서 컬럼을 펼치는 로직은 
-                // 복잡도가 높으므로 일단 상세 정보만 보여줌
             };
             resultsOverlay.appendChild(div);
         });

@@ -3,7 +3,7 @@ import pandas as pd
 import datetime
 import os
 
-# DB 파일 경로 설정 (루트 디렉토리)
+# DB 파일 경로 설정
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH = os.path.join(BASE_DIR, "policy_data.db")
 
@@ -20,37 +20,48 @@ def init_db():
             )
         ''')
 
+def delete_policy_set(set_id: int):
+    """특정 set_id와 연관된 모든 데이터를 삭제합니다."""
+    with get_connection() as conn:
+        # 1. 하위 데이터 삭제
+        for table in ['policies', 'objects', 'metadata']:
+            try:
+                conn.execute(f'DELETE FROM {table} WHERE set_id = ?', (set_id,))
+            except sqlite3.OperationalError:
+                pass
+        # 2. 메인 세트 삭제
+        conn.execute('DELETE FROM policy_sets WHERE id = ?', (set_id,))
+
+def clear_all_history():
+    """모든 정책 히스토리를 초기화합니다."""
+    with get_connection() as conn:
+        for table in ['policies', 'objects', 'metadata', 'policy_sets']:
+            try:
+                conn.execute(f'DELETE FROM {table}')
+            except sqlite3.OperationalError:
+                pass
+
 def cleanup_old_sets():
     """가장 최근 5개의 정책 세트만 유지하고 나머지는 삭제합니다."""
     with get_connection() as conn:
         cursor = conn.execute('SELECT id FROM policy_sets ORDER BY upload_time DESC LIMIT 5')
         keep_ids = [row[0] for row in cursor.fetchall()]
-        
-        if not keep_ids:
-            return
+        if not keep_ids: return
             
         placeholders = ','.join('?' for _ in keep_ids)
-        
-        # 1. 과거 데이터 삭제 (관련 테이블)
         for table in ['policies', 'objects', 'metadata']:
             try:
                 conn.execute(f'DELETE FROM {table} WHERE set_id NOT IN ({placeholders})', keep_ids)
-            except sqlite3.OperationalError:
-                pass
-        
-        # 2. 메인 세트 삭제
+            except sqlite3.OperationalError: pass
         conn.execute(f'DELETE FROM policy_sets WHERE id NOT IN ({placeholders})', keep_ids)
 
 def save_parsed_data(filename: str, parsed_result: dict) -> int:
-    """파싱된 전체 결과를 SQLite DB에 저장합니다."""
     init_db()
-    
     with get_connection() as conn:
         cursor = conn.execute('INSERT INTO policy_sets (filename, upload_time) VALUES (?, ?)', 
                               (filename, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         set_id = cursor.lastrowid
         
-        # Pandas의 to_sql을 이용하여 대용량 데이터를 고속으로 SQLite에 삽입
         if parsed_result.get('policies'):
             df_pol = pd.DataFrame(parsed_result['policies'])
             df_pol['set_id'] = set_id
@@ -66,19 +77,15 @@ def save_parsed_data(filename: str, parsed_result: dict) -> int:
             df_meta['set_id'] = set_id
             df_meta.to_sql('metadata', conn, if_exists='append', index=False)
             
-        # 성능을 위한 인덱스 생성
         try:
             conn.execute('CREATE INDEX IF NOT EXISTS idx_pol_set_parent ON policies (set_id, ParentPath)')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_pol_set_name ON policies (set_id, Name)')
-        except Exception:
-            pass
+        except Exception: pass
 
-    # 저장 완료 후 과거 이력 정리 (Max 5)
     cleanup_old_sets()
     return set_id
 
 def get_dict_results(query: str, params: tuple = ()):
-    """SELECT 쿼리 결과를 딕셔너리 리스트로 반환합니다."""
     with get_connection() as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()

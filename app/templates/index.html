@@ -11,10 +11,12 @@
         <header class="app-header">
             <div class="logo">Skyhigh Policy Explorer</div>
             
-            <div class="history-container">
+            <div class="history-container" style="display: flex; align-items: center; gap: 5px;">
                 <select id="history-select" onchange="handleSetChange()">
                     <option value="">정책 히스토리 선택...</option>
                 </select>
+                <button class="btn-icon" title="현재 이력 삭제" onclick="handleDeleteCurrentSet()">🗑️</button>
+                <button class="btn-icon" title="전체 히스토리 초기화" onclick="handleClearAllHistory()">🧹</button>
             </div>
 
             <div class="search-container">
@@ -48,7 +50,7 @@
 
         <footer class="app-footer">
             <span id="status-msg">준비됨</span>
-            <span id="policy-stats">Policies: 0 (Miller Columns Mode)</span>
+            <span id="policy-stats">Policies: Miller Columns Mode (SQLite DB)</span>
         </footer>
     </div>
 
