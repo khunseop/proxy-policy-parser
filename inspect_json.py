@@ -3,66 +3,70 @@ import sys
 from pathlib import Path
 import argparse
 
-def get_full_schema_hierarchy(data, stack=None, seen_at_depth=None, depth=0):
+def extract_all_paths(data, current_path_list=None, all_paths_dict=None, current_depth=0):
     """
-    중첩 구조를 명시하면서 탭 없이 계층을 추출
-    결과: [(depth, key_name, is_recursive), ...]
+    JSON의 모든 고유 경로를 탐색하여 685개의 경로를 모두 수집
+    all_paths_dict: { path_string: (depth, key_name, is_recursive) }
     """
-    if stack is None:
-        stack = []
-    if seen_at_depth is None:
-        seen_at_depth = set()
-
-    hierarchy = []
+    if all_paths_dict is None:
+        all_paths_dict = {}
+    if current_path_list is None:
+        current_path_list = []
 
     if isinstance(data, dict):
         for key, value in data.items():
-            # 현재 경로(stack)에 이미 이 키가 있다면 재귀 발생
-            is_recursive = key in stack
+            # 중첩 감지: 현재 경로(stack)에 이 키가 이미 있는지 확인
+            is_recursive = key in current_path_list
             
-            # (depth, key, stack_path) 조합으로 이미 기록했는지 확인하여 중복 출력 방지
-            path_id = (depth, key, ".".join(stack))
-            if path_id in seen_at_depth:
-                continue
+            # 현재까지의 전체 경로 문자열 생성
+            new_path_list = current_path_list + [key]
+            path_str = ".".join(new_path_list)
             
-            seen_at_depth.add(path_id)
+            # 경로와 메타데이터 저장 (이미 있는 경로는 무시하여 유니크 유지)
+            if path_str not in all_paths_dict:
+                all_paths_dict[path_str] = (current_depth, key, is_recursive)
             
-            if is_recursive:
-                # 재귀가 발생한 지점을 표시하고, 하위 탐색은 중단 (이미 상위에서 구조가 나왔으므로)
-                hierarchy.append((depth, f"{key} [RECURSIVE]", True))
-            else:
-                hierarchy.append((depth, key, False))
-                # 재귀가 아니면 하위 구조 탐색
-                child_hierarchy = get_full_schema_hierarchy(
-                    value, stack + [key], seen_at_depth, depth + 1
-                )
-                hierarchy.extend(child_hierarchy)
+            # 하위 구조 탐색 (JSON은 유한하므로 계속 탐색)
+            extract_all_paths(value, new_path_list, all_paths_dict, current_depth + 1)
                 
-    elif isinstance(data, list) and len(data) > 0:
-        # 리스트의 경우 모든 요소를 검사하여 발생 가능한 모든 키 구조를 수집
+    elif isinstance(data, list):
+        # 리스트 내 모든 요소를 탐색하여 누락되는 키가 없도록 함
         for item in data:
-            hierarchy.extend(get_full_schema_hierarchy(item, stack, seen_at_depth, depth))
+            extract_all_paths(item, current_path_list, all_paths_dict, current_depth)
     
-    return hierarchy
+    return all_paths_dict
 
-def save_manual_friendly_report(output_path, filename, hierarchy):
-    """숫자 계층과 재귀 표시가 포함된 리포트 저장"""
+def save_exhaustive_manual_report(output_path, filename, all_paths_dict):
+    """685개 경로를 모두 포함하며, 숫자 계층으로 표시하는 리포트 저장"""
+    # 경로 문자열 기준으로 정렬하여 계층 순서 유지
+    sorted_paths = sorted(all_paths_dict.keys())
+    
+    max_depth = 0
+    recursive_count = 0
+    
     with open(output_path, "w", encoding="utf-8") as f:
-        f.write(f"# JSON FULL SCHEMA REPORT (Manual-Copy Optimized): {filename}\n")
-        f.write(f"# Format: [Depth]: [KeyName]\n")
-        f.write(f"# [RECURSIVE] indicates the point where a parent key repeats.\n")
-        f.write("="*65 + "\n")
+        f.write(f"# JSON EXHAUSTIVE SCHEMA REPORT: {filename}\n")
+        f.write(f"# Format: [Depth]: [KeyName] [RECURSIVE (if repeated in parent)]\n")
+        f.write("="*70 + "\n")
         
-        for depth, key, _ in hierarchy:
-            f.write(f"{depth}: {key}\n")
+        for path_str in sorted_paths:
+            depth, key, is_recursive = all_paths_dict[path_str]
+            max_depth = max(max_depth, depth)
+            
+            rec_label = " [RECURSIVE]" if is_recursive else ""
+            if is_recursive:
+                recursive_count += 1
+                
+            # 탭 없이 숫자와 콜론으로만 출력
+            f.write(f"{depth}: {key}{rec_label}\n")
         
-        f.write("="*65 + "\n")
-        recursive_count = sum(1 for _, _, is_rec in hierarchy if is_rec)
-        f.write(f"# Total Unique Structural Keys: {len(hierarchy)}\n")
-        f.write(f"# Recursive Entry Points Detected: {recursive_count}\n")
+        f.write("="*70 + "\n")
+        f.write(f"# Total Unique Paths Found: {len(all_paths_dict)}\n")
+        f.write(f"# Maximum Depth: {max_depth}\n")
+        f.write(f"# Recursive Patterns: {recursive_count}\n")
 
 def main():
-    parser = argparse.ArgumentParser(description="Full Schema Inspector (Manual-Copy Friendly)")
+    parser = argparse.ArgumentParser(description="Exhaustive JSON Schema Inspector (Manual-Copy Optimized)")
     parser.add_argument("file", help="Path to the JSON file to inspect")
     parser.add_argument("-o", "--output", help="Path to save the report (.txt)")
     args = parser.parse_args()
@@ -79,27 +83,30 @@ def main():
         print(f"Error: Failed to load JSON: {str(e)}")
         return
 
-    # 1. 스키마 분석 (재귀 감지 포함)
-    print(f"Analyzing full structure of {path.name}...")
-    hierarchy = get_full_schema_hierarchy(data)
+    # 1. 모든 고유 경로 추출
+    print(f"Analyzing all paths of {path.name} (Exhaustive Search)...")
+    all_paths_dict = extract_all_paths(data)
     
-    # 2. 터미널 출력 (미리보기)
-    print("\n--- Manual-Copy Friendly Preview ---")
-    print("-" * 45)
-    for depth, key, is_rec in hierarchy[:30]:
-        print(f"{depth}: {key}")
-    if len(hierarchy) > 30:
-        print(f"... and {len(hierarchy) - 30} more entries.")
+    # 2. 터미널 미리보기
+    print("\n--- Exhaustive Numbered Preview ---")
+    sorted_keys = sorted(all_paths_dict.keys())
+    for p_str in sorted_keys[:20]:
+        depth, key, is_rec = all_paths_dict[p_str]
+        rec_label = " [RECURSIVE]" if is_rec else ""
+        print(f"{depth}: {key}{rec_label}")
     
-    print("-" * 45)
-    print(f"Total Entries: {len(hierarchy)}")
-    print(f"Recursive Points: {sum(1 for _, _, is_rec in hierarchy if is_rec)}")
-
+    if len(all_paths_dict) > 20:
+        print(f"... and {len(all_paths_dict) - 20} more paths.")
+    
+    print("-" * 40)
+    print(f"Total Unique Paths: {len(all_paths_dict)}")
+    
     # 3. 파일 저장
-    output_file = args.output if args.output else "full_schema_manual.txt"
+    output_file = args.output if args.output else "full_exhaustive_schema.txt"
     try:
-        save_manual_friendly_report(output_file, path.name, hierarchy)
-        print(f"\nSuccess: Full schema report saved to '{output_file}'")
+        save_exhaustive_manual_report(output_file, path.name, all_paths_dict)
+        print(f"\nSuccess: Exhaustive report saved to '{output_file}'")
+        print(f"Total entries: {len(all_paths_dict)} (Should match your previous 685)")
     except Exception as e:
         print(f"Error: Failed to save report: {str(e)}")
 
