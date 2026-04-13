@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Skyhigh Policy Explorer (DB Mode)</title>
+    <title>Skyhigh Policy Explorer (Finder Mode)</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
     <div id="app">
-        <!-- 상단 네비게이션 및 검색바 -->
         <header class="app-header">
             <div class="logo">Skyhigh Policy Explorer</div>
             
@@ -19,8 +18,10 @@
             </div>
 
             <div class="search-container">
-                <input type="text" id="global-search" placeholder="IP, URL, Rule Name 검색 (Server-side)..." onkeyup="handleSearch(event)">
+                <input type="text" id="global-search" placeholder="IP, URL, Rule 검색 (Enter)" onkeyup="handleSearch(event)">
             </div>
+            <!-- 검색 결과 오버레이 -->
+            <div id="search-results" class="search-results-overlay"></div>
 
             <div class="actions">
                 <input type="file" id="xml-upload" accept=".xml" style="display:none;" onchange="handleFileUpload()">
@@ -28,33 +29,29 @@
             </div>
         </header>
 
-        <!-- 메인 본문: 스플릿 뷰 -->
         <main class="app-main">
-            <!-- 좌측: 정책 트리 -->
-            <aside class="sidebar" id="policy-tree">
-                <div class="tree-header">정책 계층 구조 (지연 로딩)</div>
-                <div id="tree-content" class="tree-container">
-                    <div class="loading">정책을 선택하거나 새로 업로드해주세요.</div>
-                </div>
-            </aside>
+            <!-- 가로로 확장되는 밀러 컬럼 영역 -->
+            <div id="tree-container" class="tree-container">
+                <div class="loading" style="padding: 20px;">정책을 선택하거나 업로드하세요.</div>
+            </div>
 
-            <!-- 우측: 상세 정보 패널 -->
+            <!-- 우측 상세 정보 패널 (고정) -->
             <section class="detail-panel" id="detail-view">
                 <div class="detail-header">상세 정보</div>
                 <div id="detail-content" class="detail-container">
-                    <div class="empty-state">정책 트리를 선택하여 상세 내용을 확인하세요.</div>
+                    <div class="empty-state" style="text-align:center; color:#999; margin-top:50px;">
+                        항목을 선택하여 상세 내용을 확인하세요.
+                    </div>
                 </div>
             </section>
         </main>
 
-        <!-- 하단 상태바 -->
         <footer class="app-footer">
             <span id="status-msg">준비됨</span>
-            <span id="policy-stats">Policies: 0 (SQLite DB Mode)</span>
+            <span id="policy-stats">Policies: 0 (Miller Columns Mode)</span>
         </footer>
     </div>
 
-    <!-- 스크립트: Vanilla JS (에어갭 대응) -->
     <script src="/static/js/app.js"></script>
 </body>
 </html>
