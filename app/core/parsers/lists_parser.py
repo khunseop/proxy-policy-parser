@@ -24,11 +24,17 @@ class ListsParser:
     def _parse_complex_entry(self, complex_entry: Dict[str, Any]) -> Dict[str, Any]:
         """complexEntry 내부의 configurationProperties 추출"""
         props = {}
-        config_props = self._ensure_list(
-            complex_entry.get("configurationProperties", {}).get("configurationProperty", [])
-        )
+        if not complex_entry or not isinstance(complex_entry, dict):
+            return props
+
+        cp_container = complex_entry.get("configurationProperties") or {}
+        if not isinstance(cp_container, dict):
+            cp_container = {}
+
+        config_props = self._ensure_list(cp_container.get("configurationProperty"))
         
         for p in config_props:
+            if not isinstance(p, dict): continue
             key = p.get("@key")
             val = p.get("value", "")
             if key:
@@ -45,35 +51,46 @@ class ListsParser:
             return setup_info
 
         # 1. Connection
-        conn = setup_dict.get("connection", {})
-        if conn:
-            creds = conn.get("credentials", {})
-            setup_info["setup_conn_user"] = creds.get("username")
+        conn = setup_dict.get("connection") or {}
+        if isinstance(conn, dict):
+            creds = conn.get("credentials") or {}
+            if isinstance(creds, dict):
+                setup_info["setup_conn_user"] = creds.get("username")
             setup_info["setup_conn_url"] = conn.get("url")
 
         # 2. Proxy
-        proxy = setup_dict.get("proxy", {})
-        if proxy:
-            creds = proxy.get("credentials", {})
-            setup_info["setup_proxy_user"] = creds.get("username")
+        proxy = setup_dict.get("proxy") or {}
+        if isinstance(proxy, dict):
+            creds = proxy.get("credentials") or {}
+            if isinstance(creds, dict):
+                setup_info["setup_proxy_user"] = creds.get("username")
             setup_info["setup_proxy_host"] = proxy.get("host")
             setup_info["setup_proxy_port"] = proxy.get("port")
 
         # 3. Update Time
-        utime = setup_dict.get("updateTime", {})
-        if utime:
-            setup_info["setup_update_hourly_minute"] = utime.get("hourly", {}).get("@minute")
+        utime = setup_dict.get("updateTime") or {}
+        if isinstance(utime, dict):
+            hourly = utime.get("hourly") or {}
+            if isinstance(hourly, dict):
+                setup_info["setup_update_hourly_minute"] = hourly.get("@minute")
 
         return setup_info
 
     def parse(self):
         # libraryContent -> lists -> entry 구조
         lc = self.data.get("libraryContent") or {}
-        lists_container = lc.get("lists", {})
-        entries = self._ensure_list(lists_container.get("entry", []))
+        lists_container = lc.get("lists") or {}
+        if not isinstance(lists_container, dict):
+            lists_container = {}
+            
+        entries = self._ensure_list(lists_container.get("entry"))
 
         for item in entries:
-            list_obj = item.get("list", {})
+            if not isinstance(item, dict): continue
+            
+            list_obj = item.get("list") or {}
+            if not isinstance(list_obj, dict): continue
+
             base_info = {
                 "list_name": list_obj.get("@name"),
                 "list_id": list_obj.get("@id"),
@@ -84,11 +101,13 @@ class ListsParser:
             }
 
             # Setup 정보 파싱
-            setup_data = self._parse_setup(list_obj.get("setup", {}))
+            setup_data = self._parse_setup(list_obj.get("setup") or {})
             base_info.update(setup_data)
 
-            content = list_obj.get("content", {})
-            list_entries = self._ensure_list(content.get("listEntry", []))
+            content = list_obj.get("content") or {}
+            if not isinstance(content, dict): content = {}
+            
+            list_entries = self._ensure_list(content.get("listEntry"))
 
             # 엔트리가 없는 리스트라도 정보를 남기기 위해 처리
             if not list_entries:
