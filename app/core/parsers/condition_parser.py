@@ -1,242 +1,89 @@
-from typing import Any, Dict, List, Optional, Union
+import json
+from typing import Any, Dict, List, Optional
 
 class ConditionParser:
-    def __init__(self, condition: Optional[Dict[str, Any]]) -> None:
-        self.condition = condition
-        self.parsed = self.parse_condition(condition)
+    def __init__(self, condition_dict: Dict[str, Any]):
+        self.data = condition_dict or {}
+        self.expressions = self._ensure_list(self.data.get("expressions", {}).get("conditionExpression", []))
 
-    @classmethod
-    def ensure_list(cls, value: Union[Dict, List, None]) -> List:
-        if value is None:
-            return []
-        if isinstance(value, list):
-            return value
+    def _ensure_list(self, value: Any) -> List:
+        if value is None: return []
+        if isinstance(value, list): return value
         return [value]
 
-    def parse_condition(self, condition: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        if not condition:
-            return []
-        expressions_container = condition.get("expressions")
-        if not isinstance(expressions_container, dict):
-            return []
-        expressions = self.ensure_list(expressions_container.get("conditionExpression"))
-        return [self.parse_expression(expr) for expr in expressions if isinstance(expr, dict)]
-    
-    def _stringify_property(self, prop_instance: Dict[str, Any]) -> str:
-        """propertyInstance 구조를 문자열로 변환 (재귀 지원)"""
-        prop_id = prop_instance.get("@propertyId", "<unknown>")
-        params = self.ensure_list(prop_instance.get("parameters", {}).get("entry", []))
+    def _stringify_property(self, prop: Dict[str, Any]) -> str:
+        """propertyInstance를 문자열로 변환 (재귀적 파라미터 처리)"""
+        if not prop: return "UnknownProperty"
+        prop_id = prop.get("@propertyId", "Unknown")
         
+        params = self._ensure_list(prop.get("parameters", {}).get("entry", []))
         if not params:
             return prop_id
-        
+            
         param_strs = []
         for entry in params:
-            key = entry.get("string")
-            param_val = entry.get("parameter", {}).get("value", {})
+            param = entry.get("parameter", {})
+            val_obj = param.get("value", {})
             
-            val_str = "None"
-            if "stringValue" in param_val:
-                val_str = f'"{param_val["stringValue"].get("@value")}"'
-            elif "listValue" in param_val:
-                val_str = f'List(ID:{param_val["listValue"].get("@id")})'
-            elif "propertyInstance" in param_val:
-                val_str = self._stringify_property(param_val["propertyInstance"])
-            
-            param_strs.append(f"{key}={val_str}" if key else val_str)
-            
+            # 파라미터 값이 또 다른 프로퍼티인 경우 (재귀)
+            if "propertyInstance" in val_obj:
+                param_strs.append(self._stringify_property(val_obj["propertyInstance"]))
+            # 일반 값인 경우
+            else:
+                param_strs.append(self._stringify_value(val_obj))
+                
         return f"{prop_id}({', '.join(param_strs)})"
 
-    def _stringify_value(self, param: Dict[str, Any]) -> str:
-        """parameter/value 구조를 문자열로 변환 (재귀 지원)"""
-        if not param:
-            return "None"
+    def _stringify_value(self, val_obj: Dict[str, Any]) -> str:
+        """value 노드를 문자열로 변환"""
+        if not val_obj: return ""
+        if isinstance(val_obj, str): return f'"{val_obj}"'
         
-        # meta-value (valueId, typeId 등) 처리
-        if "@valueId" in param:
-            return str(param["@valueId"])
-
-        value = param.get("value", {})
-        if "stringValue" in value:
-            return f'"{value["stringValue"].get("@value")}"'
-        elif "listValue" in value:
-            return f'List(ID:{value["listValue"].get("@id")})'
-        elif "propertyInstance" in value:
-            return self._stringify_property(value["propertyInstance"])
+        # List 참조인 경우
+        if "listValue" in val_obj:
+            return f"List({val_obj['listValue'].get('@id', 'Unknown')})"
         
-        return "Unknown"
+        # 일반 문자열인 경우
+        if "stringValue" in val_obj:
+            return f'"{val_obj["stringValue"].get("@value", "")}"'
+            
+        return str(val_obj)
 
-    def parse_expression(self, expr: Dict[str, Any]) -> Dict[str, Any]:
-        prop_instance = expr.get("propertyInstance", {})
-        has_prop_parameters = "parameters" in prop_instance
+    def get_full_expression(self) -> str:
+        """모든 conditionExpression을 괄호와 연산자를 고려하여 하나의 문자열로 합침"""
+        if not self.expressions:
+            return "Always" if self.data.get("@always") == "true" else "None"
 
-        # 기존 로직 유지 (데이터 추출용)
-        property_parameters = self.parse_property_parameters(
-            prop_instance.get("parameters", {})
-        ) if has_prop_parameters else []
+        full_parts = []
+        for i, exp in enumerate(self.expressions):
+            prefix = exp.get("@prefix", "") # "AND", "OR", "NOT" 등
+            open_brp = "(" * int(exp.get("@openingBracketCount", 0))
+            close_brp = ")" * int(exp.get("@closingBracketCount", 0))
+            op = exp.get("@operatorId", "==")
+            
+            # 프로퍼티 추출
+            prop_str = "Unknown"
+            if "propertyInstance" in exp:
+                prop_str = self._stringify_property(exp["propertyInstance"])
+            
+            # 비교 대상 값 추출
+            val_str = ""
+            param = exp.get("parameter", {})
+            if param:
+                val_str = self._stringify_value(param.get("value", {}))
 
-        expression_parameter = self.parse_expression_parameter(expr, has_prop_parameters)
+            # 조합 (예: AND (URL.Host == "google.com") )
+            part = ""
+            if i > 0 and prefix:
+                part += f" {prefix} "
+            elif i > 0: # 프리픽스가 없는데 첫 번째가 아니면 기본 AND 처리
+                part += " AND "
+                
+            part += f"{open_brp}{prop_str} {op} {val_str}{close_brp}"
+            full_parts.append(part)
 
-        if not expression_parameter and "parameter" in prop_instance:
-            expression_parameter = self.parse_single_property_parameter(prop_instance["parameter"])
-        
-        values = [
-            v.get("value") if v["value_kind"] == "string" else v.get("list_id")
-            for v in property_parameters
-            if v["value_kind"] in ("string", "list")
-        ]
+        return "".join(full_parts).strip()
 
-        # 고도화: 문자열 형태의 조건식 생성
-        prop_str = self._stringify_property(prop_instance)
-        operator = expr.get("@operatorId", "equals")
-        val_str = self._stringify_value(expr.get("parameter", {}))
-        
-        prefix = expr.get("@prefix", "")
-        opening = "(" * int(expr.get("@openingBracketCount", 0))
-        closing = ")" * int(expr.get("@closingBracketCount", 0))
-        
-        full_expression = f"{prefix} {opening}{prop_str} {operator} {val_str}{closing}".strip()
-
-        return {
-            "prefix": prefix,
-            "open_bracket": int(expr.get("@openingBracketCount", 0)),
-            "close_bracket": int(expr.get("@closingBracketCount", 0)),
-            "property": prop_instance.get("@propertyId", "<unknown>"),
-            "operator": operator,
-            "property_values": tuple(values) if len(values) > 1 else (values[0] if values else None),
-            "expression_value": expression_parameter.get("value") if expression_parameter else None,
-            "expression_mode": expression_parameter.get("mode") if expression_parameter else None,
-            "expression_text": full_expression  # 엑셀용 평탄화 문자열 추가
-        }
-    
-    # 기존 parse_single_property_parameter, parse_property_parameters, parse_expression_parameter 메서드는 
-    # 하위 호환성을 위해 유지하되 로직은 stringify와 유사하게 작동하도록 보존
-    
-    def parse_single_property_parameter(self, param: Dict[str, Any]) -> Dict[str, Any]:
-        value_type = param.get("@valueType")
-        value = param.get("value", {})
-
-        if "stringValue" in value:
-            sv = value["stringValue"]
-            return {
-                "mode": "value",
-                "value_type": value_type,
-                "value_kind": "string",
-                "value": sv.get("@value"),
-                "modifier": sv.get("@stringModifier"),
-                "type_id": sv.get("@typeId")
-            }
-        elif "listValue" in value:
-            lv = value["listValue"]
-            return {
-                "mode": "value",
-                "value_type": value_type,
-                "value_kind": "list",
-                "list_id": lv.get("@id")
-            }
-        elif "propertyInstance" in value:
-            nested_prop = value["propertyInstance"]
-            nested_params = self.parse_property_parameters(nested_prop.get("parameters", {}))
-            return {
-                "mode": "nested_property",
-                "value_type": value_type,
-                "property": nested_prop.get("@propertyId"),
-                "parameters": nested_params
-            }
-        else:
-            return {
-                "mode": "unknown",
-                "value_type": value_type,
-                "raw_value": value
-            }
-    
-    def parse_property_parameters(self, parameters: Dict[str, Any]) -> List[Dict[str, Any]]:
-        entries = self.ensure_list(parameters.get("entry"))
-        results = []
-
-        for entry in entries:
-            key = entry.get("string")
-            param = entry.get("parameter", {})
-            value_type = param.get("@valueType")
-            value = param.get("value", {})
-
-            if "propertyInstance" in value:
-                nested_prop = value["propertyInstance"]
-                nested_params = self.parse_property_parameters(nested_prop.get("parameters", {}))
-                results.append({
-                    "key": key,
-                    "value_type": value_type,
-                    "value_kind": "nested_property",
-                    "property": nested_prop.get("@propertyId"),
-                    "parameters": nested_params
-                })
-            elif "stringValue" in value:
-                sv = value["stringValue"]
-                results.append({
-                    "key": key,
-                    "value_type": value_type,
-                    "value_kind": "string",
-                    "value": sv.get("@value"),
-                    "modifier": sv.get("@stringModifier"),
-                    "type_id": sv.get("@typeId")
-                })
-            elif "listValue" in value:
-                lv = value["listValue"]
-                results.append({
-                    "key": key,
-                    "value_type": value_type,
-                    "value_kind": "list",
-                    "list_id": lv.get("@id")
-                })
-            else:
-                results.append({
-                    "key": key,
-                    "value_type": value_type,
-                    "value_kind": "unknown",
-                    "raw_value": value
-                })
-        
-        return results
-    
-    def parse_expression_parameter(self, expr: Dict[str, Any], has_prop_parameters: bool) -> Optional[Dict[str, Any]]:
-        param = expr.get("parameter")
-        if not param:
-            return None
-        
-        value = param.get("value")
-
-        if value:
-            if "propertyInstance" in value:
-                nested_prop = value["propertyInstance"]
-                return {
-                    "mode": "nested_property",
-                    "property": nested_prop.get("@propertyId"),
-                    "parameters": self.parse_property_parameters(nested_prop.get("parameters", {}))
-                }
-            if "stringValue" in value:
-                sv = value["stringValue"]
-                return {
-                    "mode": "value",
-                    "value_kind": "string",
-                    "value": sv.get("@value"),
-                    "modifier": sv.get("@stringModifier"),
-                    "type_id": sv.get("@typeId")
-                }
-            if "listValue" in value:
-                lv = value["listValue"]
-                return {
-                    "mode": "value",
-                    "value_kind": "list",
-                    "list_id": lv.get("@id")
-                }
-        
-        return {
-            "mode": "meta",
-            "value_type": param.get("@valueType"),
-            "value_id": param.get("@valueId"),
-            "type_id": param.get("@typeId"),
-            "value": param.get("@valueId")
-        }
-    
-    def to_rows(self) -> List[Dict[str, Any]]:
-        return self.parsed
+    def to_rows(self):
+        # 기존 호환성을 위해 유지하되, 이제는 하나의 결과만 반환
+        return [{"expression_text": self.get_full_expression()}]

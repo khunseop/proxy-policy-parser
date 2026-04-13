@@ -49,14 +49,6 @@ class PolicyParser:
         details["action_summary"] = " | ".join(summaries) if summaries else "None"
         return details
 
-    def parse_condition(self, condition_dict: dict):
-        if not condition_dict or not isinstance(condition_dict, dict):
-            return []
-        try:
-            return ConditionParser(condition_dict).to_rows()
-        except Exception as e:
-            return [{"error": str(e), "expression_text": "Error parsing condition"}]
-    
     def parse(self):
         def walk(obj, stack=None):
             if stack is None: stack = []
@@ -68,45 +60,44 @@ class PolicyParser:
                 self.max_level = max(self.max_level, current_level)
             
                 if is_group or "@name" in obj:
+                    # 1. 조건문 통합 파싱 (이제 항상 1개의 문자열로 합쳐짐)
                     cond_container = obj.get("condition") or {}
-                    parsed_conditions = self.parse_condition(cond_container)
-                    if not parsed_conditions:
-                        parsed_conditions = [{"expression_text": "Always"}]
+                    full_condition_text = ConditionParser(cond_container).get_full_expression()
                     
                     action_info = self._parse_actions(obj) if not is_group else {}
                     
-                    for idx, cond in enumerate(parsed_conditions):
-                        # DB 지연 로딩을 위해 ParentPath와 Full Path를 정규화하여 저장
-                        parent_path = " > ".join(stack) if stack else ""
-                        full_path = " > ".join(stack + [current_name] if current_name else stack)
-                        
-                        record = {
-                            "Type": "Group" if is_group else "Rule",
-                            "Level": current_level,
-                            "ID": obj.get("@id", ""),
-                            "Name": obj.get("@name", ""),
-                            "Enabled": obj.get("@enabled", ""),
-                            "Condition": cond.get("expression_text", "Always"),
-                            "Actions": action_info.get("action_summary", ""),
-                            "ActionID": action_info.get("action_id", ""),
-                            "ActionConfigID": action_info.get("action_conf_id", ""),
-                            "ParentPath": parent_path,
-                            "Path": full_path,
-                            "CloudSynced": obj.get("@cloudSynced", ""),
-                            "CycleRequest": obj.get("@cycleRequest", ""),
-                            "CycleResponse": obj.get("@cycleResponse", ""),
-                            "CycleEmbedded": obj.get("@cycleEmbeddedObject", ""),
-                            "DefaultRights": obj.get("@defaultRights", ""),
-                            "ACElements": str(obj.get("acElements", "")),
-                            "Description": obj.get("description", "")
-                        }
-                        
-                        # Staircase 컬럼 (엑셀용)
-                        for i in range(1, current_level):
-                            record[f"L{i}"] = stack[i-1] if i-1 < len(stack) else ""
-                        record[f"L{current_level}"] = current_name
-                        
-                        self.all_records.append(record)
+                    # DB 지연 로딩을 위한 경로 정보
+                    parent_path = " > ".join(stack) if stack else ""
+                    full_path = " > ".join(stack + [current_name] if current_name else stack)
+                    
+                    # 2. 레코드 생성 (Rule 당 1개의 행만 생성)
+                    record = {
+                        "Type": "Group" if is_group else "Rule",
+                        "Level": current_level,
+                        "ID": obj.get("@id", ""),
+                        "Name": obj.get("@name", ""),
+                        "Enabled": obj.get("@enabled", ""),
+                        "Condition": full_condition_text,
+                        "Actions": action_info.get("action_summary", ""),
+                        "ActionID": action_info.get("action_id", ""),
+                        "ActionConfigID": action_info.get("action_conf_id", ""),
+                        "ParentPath": parent_path,
+                        "Path": full_path,
+                        "CloudSynced": obj.get("@cloudSynced", ""),
+                        "CycleRequest": obj.get("@cycleRequest", ""),
+                        "CycleResponse": obj.get("@cycleResponse", ""),
+                        "CycleEmbedded": obj.get("@cycleEmbeddedObject", ""),
+                        "DefaultRights": obj.get("@defaultRights", ""),
+                        "ACElements": str(obj.get("acElements", "")),
+                        "Description": obj.get("description", "")
+                    }
+                    
+                    # 엑셀용 Staircase 컬럼
+                    for i in range(1, current_level):
+                        record[f"L{i}"] = stack[i-1] if i-1 < len(stack) else ""
+                    record[f"L{current_level}"] = current_name
+                    
+                    self.all_records.append(record)
                 
                 if is_group and current_name:
                     stack.append(current_name)
@@ -137,7 +128,6 @@ class PolicyParser:
                 col = f"L{i}"
                 ordered_rec[col] = rec.get(col, "")
             
-            # 핵심 필드에 ParentPath 추가
             core_fields = ["Type", "Name", "Enabled", "Condition", "Actions", "ParentPath", "Path", "ID", 
                            "ActionID", "ActionConfigID", "CloudSynced", "CycleRequest", 
                            "CycleResponse", "CycleEmbedded", "DefaultRights", "ACElements", "Description"]
