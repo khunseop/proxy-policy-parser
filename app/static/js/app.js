@@ -231,16 +231,66 @@ async function addColumn(parentPath, colIndex) {
     }
 }
 
+async function handleValueSearch(event) {
+    if (event.key !== 'Enter') return;
+    const value = document.getElementById('value-search').value;
+    const resultsOverlay = document.getElementById('analysis-results');
+
+    if (!value || !currentSetId) {
+        resultsOverlay.style.display = 'none';
+        return;
+    }
+
+    resultsOverlay.innerHTML = '<div class="loading">분석 중...</div>';
+    resultsOverlay.style.display = 'block';
+
+    try {
+        const response = await fetch(`/api/v1/analysis/${currentSetId}/value-lookup?value=${encodeURIComponent(value)}`);
+        const result = await response.json();
+
+        resultsOverlay.innerHTML = `
+            <div style="padding:12px; border-bottom:1px solid #eee; background:#f9f9f9; font-weight:bold; font-size:12px;">
+                "${value}" 검색 결과: ${result.count}개의 정책 발견
+            </div>
+        `;
+
+        if (result.policies.length === 0) {
+            resultsOverlay.innerHTML += '<div style="padding:15px; color:#999;">해당 값을 포함하는 리스트가 정책에서 사용되지 않았습니다.</div>';
+            return;
+        }
+
+        result.policies.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'search-item';
+            div.innerHTML = `
+                <div class="name">[${item.Type}] ${item.Name}</div>
+                <div class="path" style="margin-top:4px;">매칭 리스트: ${objectsMap[item.MatchedListID] ? objectsMap[item.MatchedListID].name : item.MatchedListID}</div>
+                <div class="path">${item.Path}</div>
+            `;
+            div.onclick = () => {
+                showDetail(item);
+                resultsOverlay.style.display = 'none';
+            };
+            resultsOverlay.appendChild(div);
+        });
+    } catch (err) {
+        resultsOverlay.innerHTML = `<div style="padding:15px; color:red;">에러: ${err.message}</div>`;
+    }
+}
+
 function formatCondition(condition) {
     if (!condition || condition === 'Always') return 'Always';
     
     // List(ID) 패턴을 찾아서 링크로 변환
+    // ID에 점(.)이나 숫자, 영문이 포함될 수 있으므로 정규식 확장
     return condition.replace(/List\(([^)]+)\)/g, (match, id) => {
         const obj = objectsMap[id];
         if (obj) {
             return `<span class="list-link" onclick="showObjectDetail('${id}')" title="내용 보기">${obj.name}</span>`;
         }
-        return match;
+        // 만약 ID로 못찾았다면, 혹시 name으로 저장되어 있는지 확인 (일부 파서 호환성)
+        // (ID가 com.scur... 형태인 경우를 대비)
+        return `<span class="list-link" style="color:#e67e22; border-bottom: 1px dotted;" onclick="showObjectDetail('${id}')" title="ID로 찾기 시도">${id}</span>`;
     });
 }
 
@@ -319,6 +369,54 @@ function showDetail(item) {
             </div>
         </div>
     `;
+}
+
+async function showTopHosts() {
+    if (!currentSetId) {
+        alert("정책 이력을 먼저 선택해주세요.");
+        return;
+    }
+
+    const resultsOverlay = document.getElementById('analysis-results');
+    resultsOverlay.innerHTML = '<div class="loading">통계 분석 중...</div>';
+    resultsOverlay.style.display = 'block';
+
+    try {
+        const response = await fetch(`/api/v1/analysis/${currentSetId}/top-hosts?limit=30`);
+        const results = await response.json();
+
+        resultsOverlay.innerHTML = `
+            <div style="padding:12px; border-bottom:1px solid #eee; background:#f9f9f9; font-weight:bold; font-size:12px; display:flex; justify-content:space-between;">
+                <span>가장 많이 허용/참조된 Host TOP 30</span>
+                <button class="btn-icon" style="font-size:10px;" onclick="document.getElementById('analysis-results').style.display='none'">✕</button>
+            </div>
+            <div style="max-height: 450px; overflow-y: auto;">
+                <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                    <thead style="position:sticky; top:0; background:#eee;">
+                        <tr>
+                            <th style="padding:8px; text-align:left; border-bottom:1px solid #ddd;">Value (Host/IP)</th>
+                            <th style="padding:8px; text-align:right; border-bottom:1px solid #ddd;">Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${results.map(r => `
+                            <tr class="search-item" onclick="document.getElementById('value-search').value='${r.entry_value}'; handleValueSearch({key:'Enter'})">
+                                <td style="padding:8px; border-bottom:1px solid #eee;">
+                                    <div style="font-weight:bold;">${r.entry_value}</div>
+                                    <div style="font-size:10px; color:#888;">Lists: ${r.list_names}</div>
+                                </td>
+                                <td style="padding:8px; text-align:right; border-bottom:1px solid #eee; font-weight:bold; color:var(--primary-color);">
+                                    ${r.policy_count}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (err) {
+        resultsOverlay.innerHTML = `<div style="padding:15px; color:red;">에러: ${err.message}</div>`;
+    }
 }
 
 async function handleSearch(event) {

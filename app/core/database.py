@@ -77,9 +77,29 @@ def save_parsed_data(filename: str, parsed_result: dict) -> int:
             df_meta['set_id'] = set_id
             df_meta.to_sql('metadata', conn, if_exists='append', index=False)
             
+        # 4. 정책-객체 매핑 데이터 (분석용)
+        # Condition에서 List(ID)를 추출하여 매핑 테이블 생성
+        import re
+        mappings = []
+        if parsed_result.get('policies'):
+            for pol in parsed_result['policies']:
+                cond = pol.get('Condition', '')
+                found_ids = re.findall(r'List\(([^)]+)\)', cond)
+                for lid in set(found_ids):
+                    mappings.append({
+                        "set_id": set_id,
+                        "policy_id": pol.get('ID'),
+                        "list_id": lid
+                    })
+        
+        if mappings:
+            df_map = pd.DataFrame(mappings)
+            df_map.to_sql('policy_object_mapping', conn, if_exists='append', index=False)
+
         try:
             conn.execute('CREATE INDEX IF NOT EXISTS idx_pol_set_parent ON policies (set_id, ParentPath)')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_pol_set_name ON policies (set_id, Name)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_map_set_list ON policy_object_mapping (set_id, list_id)')
         except Exception: pass
 
     cleanup_old_sets()

@@ -22,10 +22,16 @@
             <div class="search-container">
                 <input type="text" id="global-search" placeholder="IP, URL, Rule 검색 (Enter)" onkeyup="handleSearch(event)">
             </div>
+            
+            <div class="search-container" style="max-width: 300px;">
+                <input type="text" id="value-search" placeholder="List 값 검색 (e.g. google.com)" onkeyup="handleValueSearch(event)">
+            </div>
             <!-- 검색 결과 오버레이 -->
             <div id="search-results" class="search-results-overlay"></div>
+            <div id="analysis-results" class="search-results-overlay" style="left: 600px;"></div>
 
             <div class="actions">
+                <button class="btn" onclick="showTopHosts()">Host 통계</button>
                 <input type="file" id="xml-upload" accept=".xml" style="display:none;" onchange="handleFileUpload()">
                 <button class="btn primary" onclick="document.getElementById('xml-upload').click()">XML 업로드</button>
             </div>

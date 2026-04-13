@@ -62,6 +62,50 @@ async def search_policies(set_id: int, query: str = Query(...)):
     """
     return get_dict_results(sql, (set_id, search_pattern, search_pattern, search_pattern, search_pattern))
 
+@router.get("/analysis/{set_id}/value-lookup")
+async def value_lookup(set_id: int, value: str = Query(...)):
+    """특정 값이 포함된 리스트를 찾고, 해당 리스트를 참조하는 정책들을 반환합니다."""
+    # 1. 값이 포함된 리스트 ID들 찾기
+    val_pattern = f"%{value}%"
+    list_ids_query = "SELECT DISTINCT list_id FROM objects WHERE set_id = ? AND entry_value LIKE ?"
+    lists = get_dict_results(list_ids_query, (set_id, val_pattern))
+    
+    if not lists:
+        return {"value": value, "found_in_lists": [], "policies": []}
+    
+    found_list_ids = [l["list_id"] for l in lists]
+    
+    # 2. 해당 리스트 ID를 참조하는 정책들 찾기
+    # Condition 컬럼에 'List(ID)' 형태가 포함되어 있는지 확인
+    policies = []
+    for lid in found_list_ids:
+        pol_query = "SELECT * FROM policies WHERE set_id = ? AND Condition LIKE ?"
+        matches = get_dict_results(pol_query, (set_id, f"%List({lid})%"))
+        for m in matches:
+            m["MatchedListID"] = lid
+            policies.append(m)
+            
+    return {
+        "value": value,
+        "found_in_lists": found_list_ids,
+        "policies": policies,
+        "count": len(policies)
+    }
+
+@router.get("/analysis/{set_id}/top-hosts")
+async def top_hosts(set_id: int, limit: int = 20):
+    """가장 많은 정책에서 참조되고 있는 Host/값들을 분석합니다."""
+    sql = """
+        SELECT o.entry_value, COUNT(DISTINCT m.policy_id) as policy_count, GROUP_CONCAT(DISTINCT o.list_name) as list_names
+        FROM objects o
+        JOIN policy_object_mapping m ON o.set_id = m.set_id AND o.list_id = m.list_id
+        WHERE o.set_id = ? AND o.entry_value IS NOT NULL AND o.entry_value != ''
+        GROUP BY o.entry_value
+        ORDER BY policy_count DESC
+        LIMIT ?
+    """
+    return get_dict_results(sql, (set_id, limit))
+
 @router.get("/objects/{set_id}")
 async def get_objects(set_id: int):
     return get_dict_results("SELECT * FROM objects WHERE set_id = ?", (set_id,))
