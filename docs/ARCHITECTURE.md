@@ -1,31 +1,23 @@
 # 시스템 아키텍처 (System Architecture)
 
-본 프로젝트는 Skyhigh Web Gateway(SWG)의 복잡한 정책 XML 파일을 분석하여, 가공하기 쉬운 데이터 구조로 변환하고 시각화하는 것을 목적으로 합니다.
+본 프로젝트는 Skyhigh Web Gateway(SWG)의 대규모 정책 XML을 안정적으로 처리하기 위해 '파싱 적재'와 '지연 조회'가 분리된 아키텍처를 가집니다.
 
-## 1. 디렉토리 구조 및 역할
-- `main.py`: FastAPI 서버의 진입점입니다. 웹 UI와 API 통신을 담당합니다.
-- `cli.py`: 터미널 환경에서 즉시 파싱을 수행하기 위한 커맨드라인 인터페이스입니다.
-- `app/core/parsers/`: 핵심 파싱 엔진들이 위치합니다.
-    - `policy_parser.py`: 정책 트리(RuleGroup/Rule)를 순회하며 계층 구조를 분석합니다.
-    - `condition_parser.py`: 복잡하게 중첩된 XML 조건식을 인간이 읽기 쉬운 텍스트로 변환합니다.
-    - `lists_parser.py`: 전역 객체(URL, IP 리스트 등)와 그 설정(Setup) 정보를 추출합니다.
-    - `metadata_parser.py`: 장비의 구성(Configurations) 및 라이브러리 메타데이터를 추출합니다.
-- `app/services/`: 파서들을 조합하여 최종 결과물을 생성하는 비즈니스 로직 레이어입니다.
-- `app/api/`: 웹 브라우저와 통신하기 위한 REST API 엔드포인트 정의입니다.
-- `app/models/`: 데이터 검증 및 규격을 정의하는 Pydantic 모델들이 위치합니다.
+## 1. 주요 구성 요소 (Components)
+
+- **파싱 엔진 (Core Parsers)**: `Policy`, `Condition`, `Lists`, `Metadata` 파서로 구성되며, XML의 재귀 구조를 평면화(Flatten)하여 정규화된 데이터를 생성합니다.
+- **데이터 저장소 (SQLite DB)**: 내장형 데이터베이스를 사용하여 파싱된 데이터를 저장합니다. 이는 메모리 사용량을 최소화하고 다수의 정책 이력을 관리하기 위함입니다.
+- **백엔드 (FastAPI)**: DB와의 인터페이스를 담당하며, 트리 탐색을 위한 경로 기반 API 및 서버사이드 검색 기능을 제공합니다.
+- **프론트엔드 (Miller Columns UI)**: macOS Finder 스타일의 UI로, 사용자가 필요한 시점에만 데이터를 서버에 요청(Lazy Loading)하여 렌더링 부하를 방지합니다.
 
 ## 2. 데이터 흐름 (Data Flow)
-1. **입력(Input)**: Skyhigh SWG 장비에서 추출한 정책 XML 파일을 입력받습니다 (API 연동 또는 파일 업로드).
-2. **파싱(Parsing)**: 
-    - XML의 복잡한 재귀 구조를 `xmltodict`를 이용해 객체화합니다.
-    - 각 파서가 담당 영역(정책, 리스트, 설정 등)을 독립적으로 분석합니다.
-3. **통합(Integration)**: `ParserService`가 파싱된 데이터들을 유기적으로 결합합니다.
-4. **출력(Output)**: 
-    - **Staircase Format**: 엑셀에서 필터링하기 쉬운 계단식 계층 구조로 출력합니다.
-    - **JSON**: 웹 UI 시각화 및 정책 변경분(Diff) 분석을 위한 정규화된 데이터로 제공합니다.
 
-## 3. 핵심 설계 원칙
-- **순차적 무결성 (Sequential Integrity)**: 정책의 상하 실행 순서를 엄격히 준수하여 파싱합니다.
-- **추적성 (Traceability)**: 모든 정책 노드에 고유 경로(Path)를 부여하여, 서로 다른 버전의 정책 간 비교가 가능하게 합니다.
-- **포괄성 (Exhaustiveness)**: `FULL_SCHEMA_REPORT.txt`에 명시된 모든 기술적 속성(ACElements, CloudSynced 등)을 누락 없이 수집합니다.
-EOF
+1.  **Ingestion**: 사용자가 XML 파일을 업로드하거나 API를 통해 장비 데이터를 가져옵니다.
+2.  **Parsing & Storage**: `ParserService`가 데이터를 분석하고 `app/core/database.py`를 통해 SQLite DB에 적재합니다. 이때 정책 간의 계층 관계를 나타내는 `ParentPath` 인덱스가 생성됩니다.
+3.  **Exploration**: 사용자가 웹 UI에서 폴더를 클릭하면, 해당 노드의 `Path`를 `ParentPath`로 가지는 하위 데이터만 DB에서 조회하여 브라우저에 표시합니다.
+4.  **Search**: 전체 데이터 검색 시 서버사이드에서 SQL `LIKE` 쿼리를 수행하여 결과값만 클라이언트에 전송합니다.
+
+## 3. 설계 원칙 (Design Principles)
+
+- **에어갭 독립성**: 외부 종속성(Node.js, 외부 CDN 등)을 배제하여 폐쇄망 환경에서 Python 단독 실행이 가능하게 합니다.
+- **대용량 최적화**: 수십만 줄의 정책도 브라우저 메모리 부족 없이 탐색할 수 있도록 서버사이드 지연 로딩을 구현합니다.
+- **데이터 무결성**: 모든 정책 레코드가 고유 ID 및 전체 경로 정보를 유지하도록 하여 향후 정책 비교(Diff) 분석의 정확도를 보장합니다.
