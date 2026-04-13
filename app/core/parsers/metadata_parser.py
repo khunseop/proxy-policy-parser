@@ -16,7 +16,7 @@ class MetadataParser:
             "version": lib_obj.get("version") if isinstance(lib_obj, dict) else None
         }
 
-        # 2. configurations 정보
+        # 2. configurations 정보 (Exhaustive)
         configs = self.data.get("configurations") or {}
         if isinstance(configs, dict):
             for conf in self._ensure_list(configs.get("configuration")):
@@ -27,13 +27,16 @@ class MetadataParser:
                     "conf_id": conf.get("@id"),
                     "mwg_version": conf.get("@mwg-version"),
                     "target_id": conf.get("@targetId"),
+                    "template_id": conf.get("@templateId"),
+                    "version": conf.get("@version"),
+                    "default_rights": conf.get("@defaultRights"),
+                    "ac_elements": str(conf.get("acElements", "")),
                     "description": conf.get("description")
                 }
                 
                 # configurationProperties 추출
                 cp_container = conf.get("configurationProperties") or {}
-                if not isinstance(cp_container, dict):
-                    cp_container = {}
+                if not isinstance(cp_container, dict): cp_container = {}
                 
                 props = self._ensure_list(cp_container.get("configurationProperty"))
                 
@@ -47,6 +50,7 @@ class MetadataParser:
                             "prop_key": p.get("@key"),
                             "prop_value": p.get("value"),
                             "prop_type": p.get("@type"),
+                            "prop_list_type": p.get("@listType"),
                             "prop_encrypted": p.get("@encrypted")
                         })
                         self.config_records.append(row)
