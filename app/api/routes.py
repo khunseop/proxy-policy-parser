@@ -76,11 +76,11 @@ async def value_lookup(set_id: int, value: str = Query(...)):
     found_list_ids = [l["list_id"] for l in lists]
     
     # 2. 해당 리스트 ID를 참조하는 정책들 찾기
-    # Condition 컬럼에 'List(ID)' 형태가 포함되어 있는지 확인
+    # Condition은 list 이름으로 치환되어 있으므로, 원본 ID가 보존된 ConditionRaw를 검색한다.
     policies = []
     for lid in found_list_ids:
-        pol_query = "SELECT * FROM policies WHERE set_id = ? AND Condition LIKE ?"
-        matches = get_dict_results(pol_query, (set_id, f"%List({lid})%"))
+        pol_query = "SELECT * FROM policies WHERE set_id = ? AND ConditionRaw LIKE ?"
+        matches = get_dict_results(pol_query, (set_id, f"%{lid}%"))
         for m in matches:
             m["MatchedListID"] = lid
             policies.append(m)

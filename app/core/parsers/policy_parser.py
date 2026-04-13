@@ -85,7 +85,8 @@ class PolicyParser:
                 self._current_pk += 1
                 current_pk = self._current_pk
                 is_group = "rules" in obj or "ruleGroups" in obj
-                
+
+                condition_parser = ConditionParser(obj.get("condition") or {})
                 record = {
                     "_pk_auto": current_pk,
                     "parent_pk": parent_pk,
@@ -93,7 +94,8 @@ class PolicyParser:
                     "Name": current_name,
                     "PolicyID": obj.get("@id"),
                     "Enabled": obj.get("@enabled", "true"),
-                    "Condition": ConditionParser(obj.get("condition") or {}).get_full_expression(),
+                    "Condition": condition_parser.get_full_expression(),
+                    "ConditionRaw": json.dumps(condition_parser.to_raw_dict(), ensure_ascii=False),
                     "Actions": self._parse_actions(obj) if not is_group else "",
                     "Path": " > ".join(stack + [current_name]),
                     "ParentPath": " > ".join(stack),

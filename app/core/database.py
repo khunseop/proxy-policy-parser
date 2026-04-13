@@ -28,12 +28,13 @@ def init_db():
             CREATE TABLE IF NOT EXISTS policies (
                 _pk_auto INTEGER PRIMARY KEY AUTOINCREMENT,
                 set_id INTEGER,
-                parent_pk INTEGER, -- 부모 노드 참조
-                Type TEXT,         -- Group or Rule
+                parent_pk INTEGER,   -- 부모 노드 참조
+                Type TEXT,           -- Group or Rule
                 Name TEXT,
                 PolicyID TEXT,
                 Enabled TEXT,
-                Condition TEXT,
+                Condition TEXT,      -- 해석된 조건 문자열 (list ID → list 이름 치환 후)
+                ConditionRaw TEXT,   -- 원본 구조 JSON (모든 ID 보존, 검색·비교용)
                 Actions TEXT,
                 Path TEXT,
                 ParentPath TEXT,
@@ -115,15 +116,25 @@ def save_parsed_data(filename: str, parsed_result: dict) -> int:
         if parsed_result.get('metadata', {}).get('config_details'):
             safe_to_sql(parsed_result['metadata']['config_details'], 'metadata')
             
-        # 매핑 데이터는 리스트 참조를 모두 포함 (Condition + Actions)
+        # 매핑 데이터: list ID는 반드시 원본 ID에서 추출해야 한다.
+        # - Condition은 list 이름으로 치환되어 있으므로 ConditionRaw(JSON)에서 추출
+        # - Actions는 List(id) 형태 그대로이므로 정규식 추출
         mappings = []
         if parsed_result.get('policies'):
             for pol in parsed_result['policies']:
-                combined = f"{pol.get('Condition', '')} {pol.get('Actions', '')}"
-                found_ids = re.findall(r'List\(([^)]+)\)', combined)
+                found_ids = set()
+
+                # ConditionRaw에서 list ID 추출 (listRef / listTypeId 필드)
+                raw_json = pol.get('ConditionRaw', '{}') or '{}'
+                found_ids.update(re.findall(r'"listRef":\s*"([^"]+)"', raw_json))
+                found_ids.update(re.findall(r'"listTypeId":\s*"([^"]+)"', raw_json))
+
+                # Actions에서 List(id) 패턴 추출 (Actions는 이름 치환이 없으므로 ID 그대로)
+                found_ids.update(re.findall(r'List\(([^)]+)\)', pol.get('Actions', '') or ''))
+
                 pol_id = pol.get('PolicyID')
                 if pol_id:
-                    for lid in set(found_ids):
+                    for lid in found_ids:
                         mappings.append({"set_id": set_id, "policy_id": pol_id, "list_id": lid})
         
         if mappings:

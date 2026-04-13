@@ -5,6 +5,51 @@
 
 ---
 
+## 0. 핵심 원칙 — 레퍼런스 기반 아키텍처 (Reference-Based Architecture)
+
+> **이 섹션은 파서 설계의 가장 중요한 전제조건입니다.**
+
+Skyhigh SWG XML의 정책 필드 대부분은 **리터럴 값이 아닌 내부 ID 참조**입니다.
+파싱 시점에 이 ID들의 의미를 확정할 수 없으며, 반드시 별도 조회(resolution)가 필요합니다.
+
+### 0.1 ID 참조 필드 분류
+
+| 필드 | 위치 | 참조 대상 | 해석 가능 여부 |
+|------|------|-----------|---------------|
+| `@propertyId` | conditionExpression > propertyInstance | 내장 프로퍼티 레지스트리 | 파싱 시점 불가 |
+| `@operatorId` | conditionExpression | 연산자 레지스트리 | 파싱 시점 불가 |
+| `@actionId` | actionContainer | 액션 레지스트리 | 파싱 시점 불가 |
+| `@engineId` | enableEngineActionContainer | 엔진 레지스트리 | 파싱 시점 불가 |
+| `@procedureId` | executeActionContainer > procedureValue | 프로시저 레지스트리 | 파싱 시점 불가 |
+| `@configurationId` | 여러 노드 | configurations 섹션 | 메타데이터로 부분 가능 |
+| `listValue/@id` | parameter > value > listValue | **lists 섹션** | **파싱 후 가능** |
+| `@listTypeId` | parameter | **lists 섹션** | **파싱 후 가능** |
+| `@typeId` | parameter, stringValue | 타입 레지스트리 | 파싱 시점 불가 |
+| `@valueId` | parameter (Form A) | 값 레지스트리 | 파싱 시점 불가 |
+| `stringValue/@value` | parameter > value > stringValue | **인라인 리터럴** | **유일한 확정값** |
+
+### 0.2 파싱 전략
+
+```
+파싱 시점 (parse time)
+  └─ 모든 ID를 원본 그대로 보존 → ConditionRaw (JSON)
+  └─ stringValue/@value 만 리터럴로 확정
+
+파싱 후 해석 (post-parse resolution)
+  └─ lists 파싱 결과로 {list_id → list_name} 맵 구성
+  └─ Condition 문자열의 List(id) → List(이름) 치환
+  └─ 그 외 @propertyId, @operatorId 등은 ID 형태 유지
+     (사람이 읽을 수 있는 확정 해석은 별도 레지스트리 데이터 필요)
+```
+
+### 0.3 이 원칙을 무시했을 때 발생하는 문제
+
+- `List(com.scur.type.list.categorized.url.list)` 같은 ID를 그대로 UI에 노출 → 의미 파악 불가
+- 조건을 `URL.Host == "some_value"` 형태로 굳혀 저장하면 원본 ID 손실 → 정책 간 비교/검색 불가
+- `@operatorId`를 `"=="` 로 임의 치환하면 연산자 의미가 달라질 수 있음 (IS_IN_LIST, MATCHES 등은 의미가 전혀 다름)
+
+---
+
 ## 1. 최상위 루트 구조 (Root Structure)
 
 XML은 `libraryContent`를 최상위 노드로 하며, 4개의 핵심 섹션으로 구분됩니다.
@@ -239,11 +284,14 @@ lists
 
 | 항목 | 위치 | 상태 |
 |------|------|------|
-| 루트 ruleGroup `@name` 부재 시 하위 전체 파싱 실패 | `policy_parser.py:walk()` | **수정 필요** |
-| `enableEngineActionContainer` 파싱 누락 | `policy_parser.py:_parse_actions()` | **수정 필요** |
-| `parameter` Form A (직접 속성) 처리 누락 | `condition_parser.py:get_full_expression()` | **수정 필요** |
-| `i==0`인 첫 표현식의 `NOT` prefix 무시 | `condition_parser.py:get_full_expression()` | **수정 필요** |
-| `propertyInstance`의 `@configurationId` 무시 | `condition_parser.py:_stringify_property()` | 경미 (정보 손실 없음) |
+| 루트 ruleGroup `@name` 부재 시 하위 전체 파싱 실패 | `policy_parser.py:walk()` | 수정 완료 |
+| `enableEngineActionContainer` 파싱 누락 | `policy_parser.py:_parse_actions()` | 수정 완료 |
+| `parameter` Form A (직접 속성) 처리 누락 | `condition_parser.py` | 수정 완료 |
+| `i==0`인 첫 표현식의 `NOT` prefix 무시 | `condition_parser.py` | 수정 완료 |
+| `ConditionRaw` JSON 보존 (원본 ID 손실 방지) | `policy_parser.py`, `database.py` | 수정 완료 |
+| 파싱 후 list ID → list name 해석 패스 | `parser_service.py` | 수정 완료 |
+| value-lookup API를 ConditionRaw 기반으로 수정 | `routes.py` | 수정 완료 |
+| `propertyInstance`의 `@configurationId` 보존 | `condition_parser.py:to_raw_dict()` | 수정 완료 |
 | ID 기반 객체 추적 (`@id` 수집) | `policy_parser.py` | 구현 완료 |
 | 계단식(Staircase) 레이아웃 컬럼 (`Level` 필드) | `policy_parser.py` | 구현 완료 |
 | `@mwg-version`, `@targetId` 등 기술 파라미터 수집 | `lists_parser.py` | 구현 완료 |
