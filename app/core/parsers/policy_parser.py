@@ -54,6 +54,12 @@ class PolicyParser:
                 if isinstance(eac, dict):
                     proc = eac.get('procedureValue', {}).get('@procedureId', 'Unknown')
                     summaries.append(f"Execute: {proc}")
+            for eng in self._ensure_list(iac.get("enableEngineActionContainer")):
+                if isinstance(eng, dict):
+                    engine_id = eng.get('@engineId', 'Unknown')
+                    config_id = eng.get('@configurationId', '')
+                    suffix = f"[cfg:{config_id}]" if config_id else ""
+                    summaries.append(f"EnableEngine: {engine_id}{suffix}")
         return " | ".join(summaries) if summaries else "None"
 
     def parse(self):
@@ -63,8 +69,18 @@ class PolicyParser:
         def walk(obj, parent_pk=None, stack=None):
             if stack is None: stack = []
             if isinstance(obj, dict):
-                current_name = obj.get("@name")
-                if not current_name: return
+                current_name = obj.get("@name") or "(Unnamed)"
+                # @name이 없는 루트 컨테이너 노드의 경우, 자신은 기록하지 않되
+                # 하위 ruleGroups / rules 는 반드시 순회해야 한다.
+                is_unnamed_root = not obj.get("@name")
+                if is_unnamed_root:
+                    rg_container = obj.get("ruleGroups") or {}
+                    for rg in self._ensure_list(rg_container.get("ruleGroup")):
+                        walk(rg, parent_pk, stack)
+                    r_container = obj.get("rules") or {}
+                    for r in self._ensure_list(r_container.get("rule")):
+                        walk(r, parent_pk, stack)
+                    return
 
                 self._current_pk += 1
                 current_pk = self._current_pk

@@ -44,18 +44,46 @@ class ConditionParser:
         if val_obj is None: return ""
         if isinstance(val_obj, str): return f'"{val_obj}"'
         if not isinstance(val_obj, dict): return str(val_obj)
-        
+
         # List 참조인 경우
         if "listValue" in val_obj:
             lv = val_obj["listValue"] or {}
             return f"List({lv.get('@id', 'Unknown')})"
-        
+
         # 일반 문자열인 경우
         if "stringValue" in val_obj:
             sv = val_obj["stringValue"] or {}
             return f'"{sv.get("@value", "")}"'
-            
+
         return str(val_obj)
+
+    def _stringify_parameter(self, param: Dict[str, Any]) -> str:
+        """parameter 노드를 문자열로 변환.
+
+        Form A: parameter에 @valueId / @listTypeId 등이 직접 붙는 경우 (value 하위 노드 없음)
+        Form B: parameter > value > (stringValue | listValue) 하위 노드가 있는 경우
+        """
+        if not param or not isinstance(param, dict):
+            return ""
+
+        # Form B — value 하위 노드 우선 처리
+        if "value" in param:
+            return self._stringify_value(param["value"])
+
+        # Form A — 직접 속성값
+        list_type_id = param.get("@listTypeId")
+        if list_type_id:
+            return f"List({list_type_id})"
+
+        value_id = param.get("@valueId")
+        if value_id:
+            return f'"{value_id}"'
+
+        type_id = param.get("@typeId")
+        if type_id:
+            return f"Type({type_id})"
+
+        return ""
 
     def get_full_expression(self) -> str:
         """모든 conditionExpression을 괄호와 연산자를 고려하여 하나의 문자열로 합침"""
@@ -76,19 +104,21 @@ class ConditionParser:
             if "propertyInstance" in exp:
                 prop_str = self._stringify_property(exp["propertyInstance"])
             
-            # 비교 대상 값 추출
+            # 비교 대상 값 추출 (Form A/B 모두 처리)
             val_str = ""
             param = exp.get("parameter") or {}
             if isinstance(param, dict):
-                val_str = self._stringify_value(param.get("value"))
+                val_str = self._stringify_parameter(param)
 
             # 조합
+            # i==0이어도 "NOT" prefix가 있을 수 있으므로 인덱스와 무관하게 처리
             part = ""
-            if i > 0 and prefix:
-                part += f" {prefix} "
-            elif i > 0:
-                part += " AND "
-                
+            if i == 0:
+                if prefix:
+                    part += f"{prefix} "
+            else:
+                part += f" {prefix} " if prefix else " AND "
+
             part += f"{open_brp}{prop_str} {op} {val_str}{close_brp}"
             full_parts.append(part)
 
