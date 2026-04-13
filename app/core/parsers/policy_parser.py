@@ -1,5 +1,4 @@
 import json
-import pandas as pd
 import xmltodict
 from typing import Any, List, Dict, Optional
 from .condition_parser import ConditionParser
@@ -17,127 +16,115 @@ class PolicyParser:
             raise ValueError("Invalid data source provided. Must be dict or XML string.")
         
         self.all_records = []
-        self.max_level = 0
 
     def _ensure_list(self, value: Any) -> List:
         if value is None: return []
         if isinstance(value, list): return value
         return [value]
 
-    def _parse_actions(self, obj: Dict[str, Any]) -> Dict[str, str]:
-        """actionContainer 및 immediateActionContainers 파싱하여 상세 정보 반환"""
+    def _extract_list_refs_recursive(self, obj: Any) -> List[str]:
+        """객체 내부를 끝까지 순회하며 모든 리스트 참조(ID, TypeID) 추출"""
+        refs = []
+        if isinstance(obj, dict):
+            # 1. listValue 직접 참조
+            if "listValue" in obj:
+                lv = obj["listValue"] or {}
+                if isinstance(lv, dict) and "@id" in lv:
+                    refs.append(f"List({lv['@id']})")
+            
+            # 2. @listTypeId 또는 @typeId 참조 (내장 리스트 등)
+            if "@listTypeId" in obj:
+                refs.append(f"List({obj['@listTypeId']})")
+            elif "@typeId" in obj:
+                tid = str(obj['@typeId'])
+                if tid.startswith('com.scur.'): refs.append(f"List({tid})")
+
+            # 3. 자식 노드 재귀 탐색 (Action 내의 parameters 등)
+            for v in obj.values():
+                refs.extend(self._extract_list_refs_recursive(v))
+        elif isinstance(obj, list):
+            for item in obj:
+                refs.extend(self._extract_list_refs_recursive(item))
+        return refs
+
+    def _parse_actions(self, obj: Dict[str, Any]) -> str:
+        """액션을 분석하고 그 안의 리스트 참조까지 요약 텍스트로 반환"""
         summaries = []
-        details = {"action_id": "", "action_conf_id": ""}
         
-        # 1. 기본 액션
+        # 기본 액션
         ac = obj.get("actionContainer")
         if ac and isinstance(ac, dict):
-            details["action_id"] = ac.get("@actionId", "")
-            details["action_conf_id"] = ac.get("@configurationId", "")
-            summaries.append(f"Action: {details['action_id']}")
+            summaries.append(f"Action: {ac.get('@actionId')}")
         
-        # 2. 즉시 실행 액션
+        # 즉시 실행 액션 (RECURSIVE 요소 포함)
         iac = obj.get("immediateActionContainers") or {}
         if isinstance(iac, dict):
+            # Set Action
             for sac in self._ensure_list(iac.get("setActionContainer")):
-                if isinstance(sac, dict): summaries.append(f"Set: {sac.get('@propertyId')}")
-            for eac in self._ensure_list(iac.get("executeActionContainer")):
-                if isinstance(eac, dict): summaries.append(f"Execute: {eac.get('procedureValue', {}).get('@procedureId')}")
-            for eec in self._ensure_list(iac.get("enableEngineActionContainer")):
-                if isinstance(eec, dict): summaries.append(f"EnableEngine: {eec.get('@engineId')}")
+                if isinstance(sac, dict):
+                    prop = sac.get('@propertyId', 'Unknown')
+                    refs = self._extract_list_refs_recursive(sac)
+                    ref_str = f" [{', '.join(set(refs))}]" if refs else ""
+                    summaries.append(f"Set: {prop}{ref_str}")
             
-        details["action_summary"] = " | ".join(summaries) if summaries else "None"
-        return details
+            # Execute
+            for eac in self._ensure_list(iac.get("executeActionContainer")):
+                if isinstance(eac, dict):
+                    proc = eac.get('procedureValue', {}).get('@procedureId', 'Unknown')
+                    summaries.append(f"Execute: {proc}")
+
+        return " | ".join(summaries) if summaries else "None"
 
     def parse(self):
+        """정책 트리를 재귀적으로 순회하며 고정된 스키마로 추출"""
+        self.all_records = []
+
         def walk(obj, stack=None):
             if stack is None: stack = []
             
             if isinstance(obj, dict):
-                is_group = "@name" in obj and ("rules" in obj or "ruleGroups" in obj)
+                # ruleGroup 또는 rule 식별 (둘 다 @name을 가짐)
                 current_name = obj.get("@name")
-                current_level = len(stack) + 1
-                self.max_level = max(self.max_level, current_level)
-            
-                if is_group or "@name" in obj:
-                    # 1. 조건문 통합 파싱 (이제 항상 1개의 문자열로 합쳐짐)
-                    cond_container = obj.get("condition") or {}
-                    full_condition_text = ConditionParser(cond_container).get_full_expression()
-                    
-                    action_info = self._parse_actions(obj) if not is_group else {}
-                    
-                    # DB 지연 로딩을 위한 경로 정보
-                    parent_path = " > ".join(stack) if stack else ""
-                    full_path = " > ".join(stack + [current_name] if current_name else stack)
-                    
-                    # 2. 레코드 생성 (Rule 당 1개의 행만 생성)
-                    record = {
-                        "Type": "Group" if is_group else "Rule",
-                        "Level": current_level,
-                        "ID": obj.get("@id", ""),
-                        "Name": obj.get("@name", ""),
-                        "Enabled": obj.get("@enabled", ""),
-                        "Condition": full_condition_text,
-                        "Actions": action_info.get("action_summary", ""),
-                        "ActionID": action_info.get("action_id", ""),
-                        "ActionConfigID": action_info.get("action_conf_id", ""),
-                        "ParentPath": parent_path,
-                        "Path": full_path,
-                        "CloudSynced": obj.get("@cloudSynced", ""),
-                        "CycleRequest": obj.get("@cycleRequest", ""),
-                        "CycleResponse": obj.get("@cycleResponse", ""),
-                        "CycleEmbedded": obj.get("@cycleEmbeddedObject", ""),
-                        "DefaultRights": obj.get("@defaultRights", ""),
-                        "ACElements": str(obj.get("acElements", "")),
-                        "Description": obj.get("description", "")
-                    }
-                    
-                    # 엑셀용 Staircase 컬럼
-                    for i in range(1, current_level):
-                        record[f"L{i}"] = stack[i-1] if i-1 < len(stack) else ""
-                    record[f"L{current_level}"] = current_name
-                    
-                    self.all_records.append(record)
+                if not current_name: return # 유효하지 않은 노드
+
+                is_group = "rules" in obj or "ruleGroups" in obj
+                current_path = " > ".join(stack + [current_name])
+                parent_path = " > ".join(stack)
+
+                # 조건 파싱
+                cond_container = obj.get("condition") or {}
+                condition_text = ConditionParser(cond_container).get_full_expression()
                 
-                if is_group and current_name:
-                    stack.append(current_name)
+                # 액션 및 액션 내 리스트 참조 파싱
+                actions_text = self._parse_actions(obj) if not is_group else ""
+
+                record = {
+                    "Type": "Group" if is_group else "Rule",
+                    "Name": current_name,
+                    "Path": current_path,
+                    "ParentPath": parent_path,
+                    "Condition": condition_text,
+                    "Actions": actions_text,
+                    "PolicyID": obj.get("@id"),
+                    "Enabled": obj.get("@enabled", "true"),
+                    "Description": obj.get("description", ""),
+                    "Level": len(stack) + 1
+                }
+                self.all_records.append(record)
+
+                # 재귀 탐색
+                new_stack = stack + [current_name]
                 
                 rg_container = obj.get("ruleGroups") or {}
-                if isinstance(rg_container, dict):
-                    for rg in self._ensure_list(rg_container.get("ruleGroup")):
-                        walk(rg, stack)
+                for rg in self._ensure_list(rg_container.get("ruleGroup")):
+                    walk(rg, new_stack)
                 
                 r_container = obj.get("rules") or {}
-                if isinstance(r_container, dict):
-                    for r in self._ensure_list(r_container.get("rule")):
-                        walk(r, stack)
-                
-                if is_group and current_name:
-                    stack.pop()
+                for r in self._ensure_list(r_container.get("rule")):
+                    walk(r, new_stack)
                 
             elif isinstance(obj, list):
                 for item in obj: walk(item, stack)
-        
-        walk(self.data)
-        
-        # 컬럼 순서 조정
-        final_records = []
-        for rec in self.all_records:
-            ordered_rec = {}
-            for i in range(1, self.max_level + 1):
-                col = f"L{i}"
-                ordered_rec[col] = rec.get(col, "")
-            
-            core_fields = ["Type", "Name", "Enabled", "Condition", "Actions", "ParentPath", "Path", "ID", 
-                           "ActionID", "ActionConfigID", "CloudSynced", "CycleRequest", 
-                           "CycleResponse", "CycleEmbedded", "DefaultRights", "ACElements", "Description"]
-            for field in core_fields:
-                ordered_rec[field] = rec.get(field, "")
-            
-            final_records.append(ordered_rec)
-            
-        self.all_records = final_records
-        return self.all_records
 
-    def to_excel(self, output_path: str):
-        pd.DataFrame(self.all_records).to_excel(output_path, index=False, engine="openpyxl")
+        walk(self.data)
+        return self.all_records

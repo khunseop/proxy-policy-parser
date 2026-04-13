@@ -351,10 +351,10 @@ function showDetail(item) {
             <div class="detail-row">
                 <span class="label">Technical Info</span>
                 <div class="value" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:12px; font-family: sans-serif;">
-                    <div><span style="color:#888">ID:</span> ${item.ID}</div>
+                    <div><span style="color:#888">Policy ID:</span> ${item.PolicyID || item.ID || 'N/A'}</div>
                     <div><span style="color:#888">Cloud:</span> ${item.CloudSynced === 'true' ? 'Yes' : 'No'}</div>
-                    <div><span style="color:#888">Cycle:</span> ${item.CycleRequest === 'true' ? 'Req' : ''} ${item.CycleResponse === 'true' ? 'Res' : ''}</div>
-                    <div><span style="color:#888">Rights:</span> ${item.DefaultRights}</div>
+                    <div><span style="color:#888">Type:</span> ${item.Type}</div>
+                    <div><span style="color:#888">Level:</span> ${item.Level}</div>
                 </div>
             </div>
 

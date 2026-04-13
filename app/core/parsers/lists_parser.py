@@ -1,5 +1,4 @@
 import json
-import pandas as pd
 import xmltodict
 from typing import Any, Dict, List, Optional, Union
 
@@ -13,121 +12,127 @@ class ListsParser:
             raise ValueError("Invalid data source provided. Must be dict or XML string.")
 
         self.lists_records = []
-    
+        self.processed_list_ids = set()
+
     def _ensure_list(self, value: Any) -> List:
         if value is None: return []
         if isinstance(value, list): return value
         return [value]
 
-    def _parse_complex_entry(self, complex_entry: Dict[str, Any]) -> Dict[str, Any]:
-        """complexEntry 내부의 모든 정보 추출"""
+    def _extract_all_properties(self, obj: Any) -> Dict[str, Any]:
+        """객체 내의 모든 @속성과 단순 값을 딕셔너리로 추출 (JSON 저장용)"""
         props = {}
-        if not complex_entry or not isinstance(complex_entry, dict): return props
-
-        # acElements, defaultRights 등 추출
-        props["entry_ac_elements"] = str(complex_entry.get("acElements", ""))
-        props["entry_default_rights"] = complex_entry.get("@defaultRights")
-
-        cp_container = complex_entry.get("configurationProperties") or {}
-        if not isinstance(cp_container, dict): cp_container = {}
-
-        config_props = self._ensure_list(cp_container.get("configurationProperty"))
-        for p in config_props:
-            if not isinstance(p, dict): continue
-            key = p.get("@key")
-            val = p.get("value") or p.get("@value", "")
-            if key:
-                props[f"prop_{key}"] = val
-                if p.get("@encrypted") == "true": props[f"prop_{key}_encrypted"] = True
-                if p.get("@listType"): props[f"prop_{key}_listType"] = p.get("@listType")
-                if p.get("@type"): props[f"prop_{key}_type"] = p.get("@type")
-                    
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if k.startswith('@'):
+                    props[k[1:]] = v
+                elif isinstance(v, (str, int, float, bool)):
+                    props[k] = v
         return props
 
-    def _parse_setup(self, setup_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """list 하위의 setup 정보 (connection, proxy, updateTime) 파싱"""
-        setup_info = {}
-        if not setup_dict or not isinstance(setup_dict, dict): return setup_info
+    def _parse_entry_recursive(self, entry: Any, base_info: Dict[str, Any]):
+        """listEntry와 그 하위의 complexEntry, recursive entry를 모두 파싱"""
+        if not entry: return
 
-        # Connection
-        conn = setup_dict.get("connection") or {}
-        if isinstance(conn, dict):
-            creds = conn.get("credentials") or {}
-            if isinstance(creds, dict): setup_info["setup_conn_user"] = creds.get("username")
-            setup_info["setup_conn_url"] = conn.get("url")
+        # 1. 단순 문자열 엔트리인 경우
+        if isinstance(entry, str):
+            row = base_info.copy()
+            row["entry_value"] = entry
+            row["entry_type"] = "string"
+            self.lists_records.append(row)
+            return
 
-        # Proxy
-        proxy = setup_dict.get("proxy") or {}
-        if isinstance(proxy, dict):
-            creds = proxy.get("credentials") or {}
-            if isinstance(creds, dict): setup_info["setup_proxy_user"] = creds.get("username")
-            setup_info["setup_proxy_host"] = proxy.get("host")
-            setup_info["setup_proxy_port"] = proxy.get("port")
+        # 2. 딕셔너리(객체) 엔트리인 경우
+        if isinstance(entry, dict):
+            # complexEntry 확인
+            ce = entry.get("complexEntry")
+            if ce:
+                # complexEntry의 기본 정보 추출
+                row = base_info.copy()
+                row["entry_type"] = "complex"
+                
+                # 가변적인 모든 속성은 details에 보관 (DB 충돌 방지)
+                details = self._extract_all_properties(ce)
+                
+                # 전형적인 값 추출 시도
+                row["entry_value"] = ce.get("description") or ce.get("@id") or "Complex Object"
+                row["entry_details"] = json.dumps(details, ensure_ascii=False)
+                self.lists_records.append(row)
 
-        # Update Time
-        utime = setup_dict.get("updateTime") or {}
-        if isinstance(utime, dict):
-            hourly = utime.get("hourly") or {}
-            if isinstance(hourly, dict): setup_info["setup_update_hourly_minute"] = hourly.get("@minute")
+                # [RECURSIVE] complexEntry 하위의 또 다른 entry들 탐색
+                sub_entries = self._ensure_list(ce.get("entry"))
+                for se in sub_entries:
+                    self._parse_entry_recursive(se, base_info)
+            else:
+                # 일반 딕셔너리 형태의 엔트리 (예: <IPRange> 등)
+                row = base_info.copy()
+                row["entry_type"] = "object"
+                row["entry_value"] = str(entry)
+                row["entry_details"] = json.dumps(entry, ensure_ascii=False)
+                self.lists_records.append(row)
 
-        return setup_info
+    def _process_list_node(self, list_obj: Dict[str, Any]):
+        """단일 list 노드 처리"""
+        if not isinstance(list_obj, dict): return
+        
+        list_id = list_obj.get("@id")
+        if not list_id or list_id in self.processed_list_ids:
+            return
+        self.processed_list_ids.add(list_id)
+
+        # 리스트의 기본 메타데이터 (고정 컬럼)
+        base_info = {
+            "list_id": list_id,
+            "list_name": list_obj.get("@name") or "Unnamed",
+            "list_type_id": list_obj.get("@typeId"),
+            "list_description": list_obj.get("description")
+        }
+
+        # content 내의 엔트리들 파싱
+        content = list_obj.get("content") or {}
+        entries = self._ensure_list(content.get("listEntry"))
+        
+        if not entries:
+            # 빈 리스트라도 메타데이터는 저장
+            row = base_info.copy()
+            row["entry_value"] = None
+            row["entry_type"] = "empty"
+            self.lists_records.append(row)
+        else:
+            for entry in entries:
+                self._parse_entry_recursive(entry, base_info)
 
     def parse(self):
-        lc = self.data.get("libraryContent") or {}
-        lists_container = lc.get("lists") or {}
-        entries = self._ensure_list(lists_container.get("entry"))
+        """XML 전체를 순회하며 모든 list 태그를 재귀적으로 발견"""
+        self.lists_records = []
+        self.processed_list_ids = set()
 
-        for item in entries:
-            if not isinstance(item, dict): continue
+        def walk(obj):
+            if isinstance(obj, dict):
+                # 1. 'list' 태그 발견
+                if "list" in obj:
+                    self._process_list_node(obj["list"])
+                
+                # 2. 'entry' 하위의 'list' (libraryContent 구조)
+                if "entry" in obj:
+                    for e in self._ensure_list(obj["entry"]):
+                        if isinstance(e, dict):
+                            if "list" in e: self._process_list_node(e["list"])
+                            if "string" in e:
+                                self.lists_records.append({
+                                    "list_id": "global_strings",
+                                    "list_name": "Global_Strings",
+                                    "entry_value": e["string"],
+                                    "entry_type": "global"
+                                })
+
+                # 3. 모든 키에 대해 재귀 탐색
+                for k, v in obj.items():
+                    if k not in ["list", "entry"]:
+                        if isinstance(v, (dict, list)): walk(v)
             
-            # 1. list 가 아닌 직접 string 엔트리가 있는 경우 처리
-            if "string" in item:
-                self.lists_records.append({"list_name": "Global_Strings", "entry_value": item["string"]})
-                continue
+            elif isinstance(obj, list):
+                for item in obj: walk(item)
 
-            list_obj = item.get("list") or {}
-            if not isinstance(list_obj, dict): continue
-
-            base_info = {
-                "list_name": list_obj.get("@name"),
-                "list_id": list_obj.get("@id"),
-                "list_type_id": list_obj.get("@typeId"),
-                "list_classifier": list_obj.get("@classifier"),
-                "list_feature": list_obj.get("@feature"),
-                "list_structural": list_obj.get("@structuralList"),
-                "list_sub_id": list_obj.get("@subId"),
-                "list_system": list_obj.get("@systemList"),
-                "list_version": list_obj.get("@version"),
-                "list_default_rights": list_obj.get("@defaultRights"),
-                "list_ac_elements": str(list_obj.get("acElements", "")),
-                "list_description": list_obj.get("description"),
-                "list_mwg_version": list_obj.get("@mwg-version")
-            }
-
-            base_info.update(self._parse_setup(list_obj.get("setup") or {}))
-
-            content = list_obj.get("content") or {}
-            if not isinstance(content, dict): content = {}
-            list_entries = self._ensure_list(content.get("listEntry"))
-
-            if not list_entries:
-                self.lists_records.append(base_info)
-                continue
-
-            for entry in list_entries:
-                row = base_info.copy()
-                if isinstance(entry, str):
-                    row["entry_value"] = entry
-                elif isinstance(entry, dict):
-                    if "complexEntry" in entry:
-                        row["entry_type"] = "complex"
-                        row.update(self._parse_complex_entry(entry["complexEntry"]))
-                    else:
-                        row.update(entry)
-                self.lists_records.append(row)
-        
+        walk(self.data)
         return self.lists_records
-    
-    def to_excel(self, lists_path: str):
-        if not self.lists_records: return
-        pd.DataFrame(self.lists_records).to_excel(lists_path, index=False, engine="openpyxl")
