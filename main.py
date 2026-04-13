@@ -27,8 +27,9 @@ templates = Jinja2Templates(directory=TEMPLATE_DIR)
 async def read_root(request: Request):
     """메인 웹 인터페이스 페이지"""
     return templates.TemplateResponse(
-        name="index.html", 
-        context={"request": request}
+        request=request,
+        name="index.html",
+        context={}
     )
 
 if __name__ == "__main__":
