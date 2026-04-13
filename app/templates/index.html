@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skyhigh Policy Explorer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 상단 네비게이션 및 검색바 -->
+        <header class="app-header">
+            <div class="logo">Skyhigh Policy Explorer</div>
+            <div class="search-container">
+                <input type="text" id="global-search" placeholder="IP, URL, Rule Name 검색..." onkeyup="handleSearch()">
+            </div>
+            <div class="actions">
+                <input type="file" id="xml-upload" accept=".xml" style="display:none;" onchange="handleFileUpload()">
+                <button class="btn primary" onclick="document.getElementById('xml-upload').click()">XML 업로드</button>
+            </div>
+        </header>
+
+        <!-- 메인 본문: 스플릿 뷰 -->
+        <main class="app-main">
+            <!-- 좌측: 정책 트리 -->
+            <aside class="sidebar" id="policy-tree">
+                <div class="tree-header">정책 계층 구조</div>
+                <div id="tree-content" class="tree-container">
+                    <div class="loading">XML 파일을 업로드해주세요.</div>
+                </div>
+            </aside>
+
+            <!-- 우측: 상세 정보 패널 -->
+            <section class="detail-panel" id="detail-view">
+                <div class="detail-header">상세 정보</div>
+                <div id="detail-content" class="detail-container">
+                    <div class="empty-state">정책 트리를 선택하여 상세 내용을 확인하세요.</div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 하단 상태바 -->
+        <footer class="app-footer">
+            <span id="status-msg">준비됨</span>
+            <span id="policy-stats">Policies: 0, Objects: 0</span>
+        </footer>
+    </div>
+
+    <!-- 스크립트: Vanilla JS (에어갭 대응) -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
