@@ -1,6 +1,7 @@
 import json
 import pandas as pd
 import xmltodict
+from typing import Any, List, Dict
 from .condition_parser import ConditionParser
 
 class PolicyParser:
