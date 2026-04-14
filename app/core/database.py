@@ -71,7 +71,29 @@ def init_db():
             )
         ''')
 
-        # 4. 분석용 매핑
+        # 4. 설정 메타데이터 (configurations + libraryObject)
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS metadata (
+                _pk_auto INTEGER PRIMARY KEY AUTOINCREMENT,
+                set_id INTEGER,
+                conf_name TEXT,
+                conf_id TEXT,
+                mwg_version TEXT,
+                target_id TEXT,
+                template_id TEXT,
+                version TEXT,
+                default_rights TEXT,
+                ac_elements TEXT,
+                description TEXT,
+                prop_key TEXT,
+                prop_value TEXT,
+                prop_type TEXT,
+                prop_list_type TEXT,
+                prop_encrypted TEXT
+            )
+        ''')
+
+        # 5. 분석용 매핑
         conn.execute('''
             CREATE TABLE IF NOT EXISTS policy_object_mapping (
                 _pk_auto INTEGER PRIMARY KEY AUTOINCREMENT,

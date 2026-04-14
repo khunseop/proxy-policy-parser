@@ -1,5 +1,6 @@
 let currentSetId = null;
-let objectsMap = {}; // list_id -> { name, entries: [] }
+let objectsMap = {};       // list_id   -> { name, type, entries[] }
+let objectsNameToId = {};  // list_name -> list_id  (백엔드 이름 치환 이후 역참조용)
 
 window.onload = () => {
     loadHistory();
@@ -76,6 +77,7 @@ async function loadObjects(set_id) {
         const response = await fetch(`/api/v1/objects/${set_id}`);
         const objects = await response.json();
         objectsMap = {};
+        objectsNameToId = {};
         objects.forEach(obj => {
             const id = obj.list_id;
             if (!objectsMap[id]) {
@@ -84,6 +86,8 @@ async function loadObjects(set_id) {
                     type: obj.list_type_id,
                     entries: []
                 };
+                // 이름 → ID 역매핑 구성 (Condition 문자열이 list 이름으로 치환된 경우 복원용)
+                if (obj.list_name) objectsNameToId[obj.list_name] = id;
             }
             if (obj.entry_value) {
                 objectsMap[id].entries.push({
@@ -280,17 +284,28 @@ async function handleValueSearch(event) {
 
 function formatCondition(condition) {
     if (!condition || condition === 'Always') return 'Always';
-    
-    // List(ID) 패턴을 찾아서 링크로 변환
-    // ID에 점(.)이나 숫자, 영문이 포함될 수 있으므로 정규식 확장
-    return condition.replace(/List\(([^)]+)\)/g, (match, id) => {
-        const obj = objectsMap[id];
-        if (obj) {
-            return `<span class="list-link" onclick="showObjectDetail('${id}')" title="내용 보기">${obj.name}</span>`;
+    if (condition === 'None') return '<span style="color:#aaa; font-style:italic;">조건 없음</span>';
+
+    // List(값) 패턴을 찾아 클릭 가능한 링크로 변환.
+    // 백엔드가 list 이름으로 치환한 경우(List(이름))와 원본 ID 그대로인 경우(List(id)) 모두 처리.
+    return condition.replace(/List\(([^)]+)\)/g, (match, nameOrId) => {
+        // 1) list_id로 직접 조회 (원본 ID가 그대로 남은 경우)
+        let listId = nameOrId;
+        let obj = objectsMap[nameOrId];
+
+        // 2) list 이름으로 역조회 (백엔드가 이름으로 치환한 경우)
+        if (!obj && objectsNameToId[nameOrId]) {
+            listId = objectsNameToId[nameOrId];
+            obj = objectsMap[listId];
         }
-        // 만약 ID로 못찾았다면, 혹시 name으로 저장되어 있는지 확인 (일부 파서 호환성)
-        // (ID가 com.scur... 형태인 경우를 대비)
-        return `<span class="list-link" style="color:#e67e22; border-bottom: 1px dotted;" onclick="showObjectDetail('${id}')" title="ID로 찾기 시도">${id}</span>`;
+
+        if (obj) {
+            const displayName = obj.name || nameOrId;
+            return `<span class="list-link" onclick="showObjectDetail('${listId}')" title="내용 보기: ${listId}">${displayName}</span>`;
+        }
+
+        // 어느 쪽으로도 찾지 못한 경우 — 원문 그대로 표시
+        return `<span class="list-link" style="color:#e67e22; border-bottom:1px dotted;" title="목록에서 찾지 못함: ${nameOrId}">${nameOrId}</span>`;
     });
 }
 

@@ -36,18 +36,39 @@ class ListsParser:
         elif isinstance(entry, dict):
             ce = entry.get("complexEntry")
             if ce:
+                # complexEntry: 메타데이터를 포함하는 복합 객체
                 row["entry_type"] = "complex"
                 row["entry_value"] = ce.get("description") or ce.get("@id")
-                # 가변 속성 보존
                 row["entry_details"] = json.dumps(ce, ensure_ascii=False)
                 self.lists_records.append(row)
 
-                # [RECURSIVE] 하위 엔트리 파싱
+                # [RECURSIVE] complexEntry 내부의 하위 엔트리
                 for sub in self._ensure_list(ce.get("entry")):
                     self._parse_entry_recursive(sub, base_info, current_pk)
+
+            elif "entry" in entry:
+                # 단순 dict 형태: {"entry": "value", "description": "..."}
+                # xmltodict가 <listEntry><entry>val</entry><description>desc</description></listEntry>를
+                # {'entry': 'val', 'description': '...'} 으로 파싱하는 케이스
+                simple_val = entry.get("entry")
+                if isinstance(simple_val, str):
+                    row["entry_value"] = simple_val
+                    row["entry_type"] = "string"
+                    row["entry_details"] = entry.get("description") or ""
+                    self.lists_records.append(row)
+                elif isinstance(simple_val, list):
+                    # 동일 listEntry 내에 여러 <entry> 태그가 있는 경우
+                    for sub_val in simple_val:
+                        self._parse_entry_recursive(sub_val, base_info, current_pk)
+                else:
+                    row["entry_type"] = "object"
+                    row["entry_value"] = str(simple_val)
+                    self.lists_records.append(row)
             else:
+                # 위 패턴에 해당하지 않는 기타 dict — 원본을 JSON으로 보존
                 row["entry_type"] = "object"
-                row["entry_value"] = str(entry)
+                row["entry_value"] = None
+                row["entry_details"] = json.dumps(entry, ensure_ascii=False)
                 self.lists_records.append(row)
 
     def _process_list_node(self, list_obj: Dict[str, Any]):
