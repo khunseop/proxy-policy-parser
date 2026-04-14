@@ -10,7 +10,7 @@
     <div id="app">
         <header class="app-header">
             <div class="logo">Skyhigh Policy Explorer</div>
-            
+
             <div class="history-container" style="display: flex; align-items: center; gap: 5px;">
                 <select id="history-select" onchange="handleSetChange()">
                     <option value="">정책 히스토리 선택...</option>
@@ -22,25 +22,30 @@
             <div class="search-container">
                 <input type="text" id="global-search" placeholder="IP, URL, Rule 검색 (Enter)" onkeyup="handleSearch(event)">
             </div>
-            
+
             <div class="search-container" style="max-width: 300px;">
                 <input type="text" id="value-search" placeholder="List 값 검색 (e.g. google.com)" onkeyup="handleValueSearch(event)">
             </div>
-            <!-- 검색 결과 오버레이 -->
-            <div id="search-results" class="search-results-overlay"></div>
-            <div id="analysis-results" class="search-results-overlay" style="left: 600px;"></div>
 
             <div class="actions">
-                <button class="btn" onclick="showTopHosts()">Host 통계</button>
                 <input type="file" id="xml-upload" accept=".xml" style="display:none;" onchange="handleFileUpload()">
-                <button class="btn primary" onclick="document.getElementById('xml-upload').click()">XML 업로드</button>
+                <button id="xml-upload-btn" class="btn primary" onclick="document.getElementById('xml-upload').click()">XML 업로드</button>
             </div>
         </header>
+
+        <!-- 검색 결과 오버레이 (position: fixed, JS로 위치 지정) -->
+        <div id="search-results" class="search-results-overlay"></div>
+        <div id="analysis-results" class="search-results-overlay"></div>
 
         <!-- 탭바 -->
         <div class="tab-bar">
             <button class="tab-btn active" id="tab-policies" onclick="showTab('policies')">📋 정책 트리</button>
             <button class="tab-btn" id="tab-lists" onclick="showTab('lists')">📦 Lists</button>
+        </div>
+
+        <!-- Breadcrumb bar -->
+        <div id="breadcrumb-bar" class="breadcrumb-bar">
+            <span class="crumb crumb-root" onclick="initFinder()">Root</span>
         </div>
 
         <main class="app-main">
@@ -51,16 +56,37 @@
 
             <!-- Lists 탭 패널 -->
             <div id="lists-container" class="lists-container">
-                <div class="lists-sidebar">
-                    <div class="lists-sidebar-header">
-                        <input type="text" id="list-name-filter" placeholder="List 이름 검색..." oninput="filterListNames(this.value)">
+                <!-- 서브탭 바 -->
+                <div class="lists-subtab-bar">
+                    <button class="subtab-btn active" id="subtab-lists" onclick="showListsSubTab('lists')">📦 Lists</button>
+                    <button class="subtab-btn" id="subtab-stats" onclick="showListsSubTab('stats')">📊 Host 통계</button>
+                </div>
+
+                <!-- Lists 보기 -->
+                <div id="lists-view" class="lists-view-panel">
+                    <div class="lists-sidebar">
+                        <div class="lists-sidebar-header">
+                            <input type="text" id="list-name-filter" placeholder="List 이름 검색..." oninput="filterListNames(this.value)">
+                        </div>
+                        <div class="lists-names-panel" id="lists-names-panel">
+                            <div class="lists-empty-state">정책을 먼저 선택하세요.</div>
+                        </div>
                     </div>
-                    <div class="lists-names-panel" id="lists-names-panel">
-                        <div class="lists-empty-state">정책을 먼저 선택하세요.</div>
+                    <div class="lists-entries-panel" id="lists-entries-panel">
+                        <div class="lists-empty-state">왼쪽에서 List를 선택하세요.</div>
                     </div>
                 </div>
-                <div class="lists-entries-panel" id="lists-entries-panel">
-                    <div class="lists-empty-state">왼쪽에서 List를 선택하세요.</div>
+
+                <!-- Host 통계 보기 -->
+                <div id="stats-view" class="stats-view-panel">
+                    <div class="stats-toolbar">
+                        <span class="stats-title">📊 Host 통계 (정책 참조 기준)</span>
+                        <button class="btn" onclick="loadStatsData()">🔄 새로고침</button>
+                        <button class="btn" onclick="exportStatsCSV()">⬇️ CSV</button>
+                    </div>
+                    <div id="stats-content" class="stats-content">
+                        <div class="lists-empty-state">정책을 먼저 선택하세요.</div>
+                    </div>
                 </div>
             </div>
 
