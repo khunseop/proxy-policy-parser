@@ -1,0 +1,79 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]: Skyhigh Policy Explorer
+    - generic [ref=e5]:
+      - combobox [ref=e6] [cursor=pointer]:
+        - option "정책 선택..."
+        - option "2026-04-14 09:24:12 · test.xml" [selected]
+      - button "🗑️" [ref=e7] [cursor=pointer]
+      - button "🧹" [ref=e8] [cursor=pointer]
+    - button "XML 업로드" [ref=e10] [cursor=pointer]
+  - generic [ref=e11]:
+    - complementary [ref=e12]:
+      - generic [ref=e13]:
+        - button "📋 Policy" [ref=e14] [cursor=pointer]
+        - button "📦 Lists" [ref=e15] [cursor=pointer]
+        - button "📊 Stats" [ref=e16] [cursor=pointer]
+      - generic [ref=e17]:
+        - textbox "List 이름 검색..." [ref=e134]
+        - generic "list-001" [ref=e136] [cursor=pointer]:
+          - generic [ref=e137]: AllowedHosts
+          - generic [ref=e138]: "2"
+    - generic [ref=e26]:
+      - generic [ref=e140]:
+        - heading "AllowedHosts" [level=3] [ref=e141]
+        - generic [ref=e142]: list-001 · 2 / 2 항목
+      - textbox "항목 검색..." [ref=e144]
+      - table [ref=e145]:
+        - rowgroup [ref=e146]:
+          - row "Value Description Type" [ref=e147]:
+            - columnheader "Value" [ref=e148]
+            - columnheader "Description" [ref=e149]
+            - columnheader "Type" [ref=e150]
+        - rowgroup [ref=e151]:
+          - row "example.com Main site string" [ref=e152]:
+            - cell "example.com" [ref=e153]
+            - cell "Main site" [ref=e154]
+            - cell "string" [ref=e155]
+          - row "test.com string" [ref=e156]:
+            - cell "test.com" [ref=e157]
+            - cell [ref=e158]
+            - cell "string" [ref=e159]
+      - generic [ref=e160]: 이 List를 참조하는 정책
+      - generic [ref=e162]: 참조하는 정책 없음
+    - complementary [ref=e88]:
+      - generic [ref=e89]:
+        - generic [ref=e90]: 규칙 정보
+        - button "✕" [ref=e91] [cursor=pointer]
+      - generic [ref=e92]:
+        - generic [ref=e93]:
+          - text: 📄 Rule1
+          - generic [ref=e94]: 활성
+        - generic [ref=e95]: Root > Group1 > Rule1
+        - generic [ref=e96]:
+          - generic [ref=e97]: 조건 (Condition)
+          - generic [ref=e98]: Always (항상 적용)
+        - generic [ref=e99]:
+          - generic [ref=e100]: 액션 (Actions)
+          - generic [ref=e101]: "Action: com.scur.action.block"
+        - generic [ref=e102]:
+          - generic [ref=e103]: 기술 정보
+          - generic [ref=e104]:
+            - generic [ref=e105]:
+              - generic [ref=e106]: Type
+              - generic [ref=e107]: Rule
+            - generic [ref=e108]:
+              - generic [ref=e109]: Level
+              - generic [ref=e110]: "3"
+            - generic [ref=e111]:
+              - generic [ref=e112]: Cloud Sync
+              - generic [ref=e113]: ✗
+            - generic [ref=e114]:
+              - generic [ref=e115]: Cycle
+              - generic [ref=e116]: Req:✗ / Res:✗
+        - generic [ref=e117]:
+          - generic [ref=e118]: Policy ID
+          - generic [ref=e119]: r-1
+  - contentinfo [ref=e28]:
+    - generic [ref=e29]: 준비됨
+    - generic [ref=e47]: 1개 결과

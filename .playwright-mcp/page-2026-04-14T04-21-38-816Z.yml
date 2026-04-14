@@ -1,0 +1,37 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]: Skyhigh Policy Explorer
+    - generic [ref=e5]:
+      - combobox [disabled] [ref=e6] [cursor=pointer]:
+        - option "정책 선택..."
+        - option "2026-04-14 09:24:12 · test.xml" [selected]
+      - button "🗑️" [ref=e7] [cursor=pointer]
+      - button "🧹" [ref=e8] [cursor=pointer]
+    - button "XML 업로드" [disabled] [ref=e10] [cursor=pointer]
+  - generic [ref=e11]:
+    - complementary [ref=e12]:
+      - generic [ref=e13]:
+        - button "📋 Policy" [ref=e14] [cursor=pointer]
+        - button "📦 Lists" [ref=e15] [cursor=pointer]
+        - button "📊 Stats" [ref=e16] [cursor=pointer]
+      - generic [ref=e17]:
+        - textbox "트리 검색..." [ref=e31]
+        - generic [ref=e34] [cursor=pointer]:
+          - generic [ref=e35]: ▶
+          - generic [ref=e36]: 📁
+          - generic "Root" [ref=e37]
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e38] [cursor=pointer]: Root
+        - textbox "정책 검색..." [ref=e25]
+      - generic [ref=e39] [cursor=pointer]:
+        - generic [ref=e40]: 📁
+        - generic [ref=e41]:
+          - generic [ref=e42]: Root
+          - generic [ref=e43]:
+            - generic [ref=e44]: 활성
+            - generic [ref=e45]: Group
+        - generic [ref=e46]: ›
+  - contentinfo [ref=e28]:
+    - generic [ref=e29]: 로딩 중...
+    - generic [ref=e47]: 1개 항목

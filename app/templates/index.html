@@ -3,116 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Skyhigh Policy Explorer (Finder Mode)</title>
+    <title>Skyhigh Policy Explorer</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div id="app">
-        <header class="app-header">
-            <div class="logo">Skyhigh Policy Explorer</div>
+<div id="app">
 
-            <div class="history-container" style="display: flex; align-items: center; gap: 5px;">
-                <select id="history-select" onchange="handleSetChange()">
-                    <option value="">정책 히스토리 선택...</option>
-                </select>
-                <button class="btn-icon" title="현재 이력 삭제" onclick="handleDeleteCurrentSet()">🗑️</button>
-                <button class="btn-icon" title="전체 히스토리 초기화" onclick="handleClearAllHistory()">🧹</button>
+    <!-- Header -->
+    <header class="app-header">
+        <div class="logo">Skyhigh Policy Explorer</div>
+        <div class="header-mid">
+            <select id="history-select" onchange="handleSetChange()">
+                <option value="">정책 선택...</option>
+            </select>
+            <button class="btn-icon" title="현재 이력 삭제" onclick="handleDeleteCurrentSet()">🗑️</button>
+            <button class="btn-icon" title="전체 히스토리 초기화" onclick="handleClearAllHistory()">🧹</button>
+        </div>
+        <div class="header-right">
+            <input type="file" id="xml-upload" accept=".xml" style="display:none;" onchange="handleFileUpload()">
+            <button id="xml-upload-btn" class="btn primary" onclick="document.getElementById('xml-upload').click()">XML 업로드</button>
+        </div>
+    </header>
+
+    <!-- Workspace -->
+    <div class="workspace">
+
+        <!-- Left Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-tabs">
+                <button class="stab active" data-tab="policies" onclick="showTab('policies')">📋 Policy</button>
+                <button class="stab" data-tab="lists" onclick="showTab('lists')">📦 Lists</button>
+                <button class="stab" data-tab="stats" onclick="showTab('stats')">📊 Stats</button>
             </div>
-
-            <div class="search-container">
-                <input type="text" id="global-search" placeholder="IP, URL, Rule 검색 (Enter)" onkeyup="handleSearch(event)">
+            <div class="sidebar-body" id="sidebar-body">
+                <div class="sidebar-placeholder">정책을 선택하거나 업로드하세요.</div>
             </div>
+        </aside>
 
-            <div class="search-container" style="max-width: 300px;">
-                <input type="text" id="value-search" placeholder="List 값 검색 (e.g. google.com)" onkeyup="handleValueSearch(event)">
+        <!-- Main Panel -->
+        <div class="main-panel">
+            <div class="main-toolbar" id="main-toolbar">
+                <div class="breadcrumb-wrap">
+                    <div class="breadcrumb" id="breadcrumb">
+                        <span class="crumb crumb-root" onclick="loadMainContent('')">Root</span>
+                    </div>
+                </div>
+                <div class="search-wrap">
+                    <input type="text" id="main-search" placeholder="정책 검색..."
+                           oninput="handleSearchInput(event)" onkeydown="handleSearchKeydown(event)">
+                    <button class="search-clear hidden" id="search-clear" onclick="clearSearch()">✕</button>
+                </div>
             </div>
-
-            <div class="actions">
-                <input type="file" id="xml-upload" accept=".xml" style="display:none;" onchange="handleFileUpload()">
-                <button id="xml-upload-btn" class="btn primary" onclick="document.getElementById('xml-upload').click()">XML 업로드</button>
+            <div class="main-body" id="main-body">
+                <div class="empty-state">정책을 선택하거나 업로드하세요.</div>
             </div>
-        </header>
-
-        <!-- 검색 결과 오버레이 (position: fixed, JS로 위치 지정) -->
-        <div id="search-results" class="search-results-overlay"></div>
-        <div id="analysis-results" class="search-results-overlay"></div>
-
-        <!-- 탭바 -->
-        <div class="tab-bar">
-            <button class="tab-btn active" id="tab-policies" onclick="showTab('policies')">📋 정책 트리</button>
-            <button class="tab-btn" id="tab-lists" onclick="showTab('lists')">📦 Lists</button>
         </div>
 
-        <!-- Breadcrumb bar -->
-        <div id="breadcrumb-bar" class="breadcrumb-bar">
-            <span class="crumb crumb-root" onclick="initFinder()">Root</span>
-        </div>
-
-        <main class="app-main">
-            <!-- 가로로 확장되는 밀러 컬럼 영역 -->
-            <div id="tree-container" class="tree-container">
-                <div class="loading" style="padding: 20px;">정책을 선택하거나 업로드하세요.</div>
+        <!-- Right Detail Panel -->
+        <aside class="detail-panel hidden" id="detail-panel">
+            <div class="detail-header">
+                <span class="detail-title" id="detail-title">상세 정보</span>
+                <button class="btn-icon" onclick="closeDetail()">✕</button>
             </div>
-
-            <!-- Lists 탭 패널 -->
-            <div id="lists-container" class="lists-container">
-                <!-- 서브탭 바 -->
-                <div class="lists-subtab-bar">
-                    <button class="subtab-btn active" id="subtab-lists" onclick="showListsSubTab('lists')">📦 Lists</button>
-                    <button class="subtab-btn" id="subtab-stats" onclick="showListsSubTab('stats')">📊 Host 통계</button>
-                </div>
-
-                <!-- Lists 보기 -->
-                <div id="lists-view" class="lists-view-panel">
-                    <div class="lists-sidebar">
-                        <div class="lists-sidebar-header">
-                            <input type="text" id="list-name-filter" placeholder="List 이름 검색..." oninput="filterListNames(this.value)">
-                        </div>
-                        <div class="lists-names-panel" id="lists-names-panel">
-                            <div class="lists-empty-state">정책을 먼저 선택하세요.</div>
-                        </div>
-                    </div>
-                    <div class="lists-entries-panel" id="lists-entries-panel">
-                        <div class="lists-empty-state">왼쪽에서 List를 선택하세요.</div>
-                    </div>
-                </div>
-
-                <!-- Host 통계 보기 -->
-                <div id="stats-view" class="stats-view-panel">
-                    <div class="stats-toolbar">
-                        <span class="stats-title">📊 Host 통계 (정책 참조 기준)</span>
-                        <button class="btn" onclick="loadStatsData()">🔄 새로고침</button>
-                        <button class="btn" onclick="exportStatsCSV()">⬇️ CSV</button>
-                    </div>
-                    <div id="stats-content" class="stats-content">
-                        <div class="lists-empty-state">정책을 먼저 선택하세요.</div>
-                    </div>
-                </div>
+            <div class="detail-body" id="detail-body">
+                <div class="empty-state" style="margin-top:40px;">항목을 선택하세요.</div>
             </div>
+        </aside>
 
-            <!-- Resizer -->
-            <div class="resizer" id="drag-resizer"></div>
-
-            <!-- 우측 상세 정보 패널 (고정) -->
-            <section class="detail-panel" id="detail-view">
-                <div class="detail-header">
-                    <span>상세 정보</span>
-                    <button class="btn-icon" style="font-size: 14px;" onclick="closeDetailView()">✕</button>
-                </div>
-                <div id="detail-content" class="detail-container">
-                    <div class="empty-state" style="text-align:center; color:#999; margin-top:50px;">
-                        항목을 선택하여 상세 내용을 확인하세요.
-                    </div>
-                </div>
-            </section>
-        </main>
-
-        <footer class="app-footer">
-            <span id="status-msg">준비됨</span>
-            <span id="policy-stats">Policies: Miller Columns Mode (SQLite DB)</span>
-        </footer>
     </div>
 
-    <script src="/static/js/app.js"></script>
+    <!-- Footer -->
+    <footer class="app-footer">
+        <span id="status-msg">준비됨</span>
+        <span id="policy-stats"></span>
+    </footer>
+
+</div>
+<script src="/static/js/app.js"></script>
 </body>
 </html>
