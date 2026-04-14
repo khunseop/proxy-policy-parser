@@ -644,6 +644,106 @@ mark {
 }
 
 /* ── Lists Tab ── */
+
+/* Mode toggle (이름 | 값 검색) */
+.list-mode-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.lm-tab {
+    flex: 1;
+    padding: 7px 4px;
+    border: none;
+    background: #ededf0;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-sec);
+    border-bottom: 2px solid transparent;
+    transition: all 0.12s;
+}
+.lm-tab:hover:not(.active) { background: rgba(0,0,0,0.05); color: var(--text); }
+.lm-tab.active {
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary);
+    background: white;
+}
+
+/* Value search hint */
+.list-value-hint {
+    padding: 10px 10px 6px;
+    font-size: 10.5px;
+    color: var(--text-sec);
+    line-height: 1.55;
+    border-bottom: 1px solid var(--border);
+    background: #fafafa;
+}
+
+/* Value search result blocks (main panel) */
+.vr-list-block {
+    border-bottom: 1px solid var(--border);
+}
+.vr-list-header {
+    padding: 9px 14px;
+    background: #f5f5f7;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background 0.1s;
+}
+.vr-list-header:hover { background: #e8e8ed; }
+.vr-match-count {
+    font-size: 10px;
+    background: var(--primary);
+    color: white;
+    padding: 1px 7px;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+.vr-total-count {
+    font-size: 10px;
+    color: var(--text-sec);
+    font-weight: 400;
+    flex-shrink: 0;
+}
+.vr-entries { background: white; }
+.vr-entry {
+    padding: 5px 14px 5px 32px;
+    font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace;
+    font-size: 11px;
+    border-bottom: 1px solid #f5f5f7;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #333;
+}
+.vr-entry:last-child { border-bottom: none; }
+.vr-entry-more {
+    padding: 5px 14px 5px 32px;
+    font-size: 10px;
+    color: var(--text-sec);
+    font-style: italic;
+}
+.vr-policies-bar {
+    padding: 8px 14px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-sec);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: #f0f0f5;
+    border-top: 2px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    margin-top: 6px;
+    position: sticky;
+    top: 42px;
+    z-index: 2;
+}
+
 .list-filter-wrap {
     padding: 8px;
     border-bottom: 1px solid var(--border);

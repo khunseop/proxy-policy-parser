@@ -11,6 +11,9 @@ let listRefPolicies= [];
 let searchTimer    = null;
 let currentViewData= [];   // currently displayed policy nodes (for CSV export)
 
+let listSearchMode  = 'name';   // 'name' | 'value'
+let listSearchTimer = null;
+
 let statsData       = [];
 let statsSortedData = [];
 let statsSortCol    = 'policy_count';
@@ -178,8 +181,10 @@ function showPoliciesTab() {
 function showListsTab() {
     document.getElementById('main-toolbar').style.display = 'none';
     renderListsSidebar('');
-    if (activeListId && objectsMap[activeListId]) showListEntries(activeListId, '');
-    else document.getElementById('main-body').innerHTML = '<div class="empty-state">왼쪽에서 List를 선택하세요.</div>';
+    if (listSearchMode === 'name') {
+        if (activeListId && objectsMap[activeListId]) showListEntries(activeListId, '');
+        else document.getElementById('main-body').innerHTML = '<div class="empty-state">왼쪽에서 List를 선택하세요.</div>';
+    }
 }
 
 function showStatsTab() {
@@ -894,14 +899,53 @@ function renderListsSidebar(filterText) {
         return;
     }
 
+    const isValue = listSearchMode === 'value';
     body.innerHTML = `
-        <div class="list-filter-wrap">
-            <input type="text" placeholder="List 이름 검색..." value="${escapeHtml(filterText)}"
-                   oninput="filterAndRenderLists(this.value)">
+        <div class="list-mode-tabs">
+            <button class="lm-tab ${!isValue ? 'active' : ''}" onclick="setListSearchMode('name')">📋 이름 검색</button>
+            <button class="lm-tab ${isValue ? 'active' : ''}" onclick="setListSearchMode('value')">🔍 값 검색</button>
         </div>
+        <div class="list-filter-wrap">
+            <input type="text" id="list-search-input"
+                   placeholder="${isValue ? '값 검색 (예: google.com)...' : 'List 이름 검색...'}"
+                   value="${escapeHtml(filterText)}"
+                   oninput="handleListSearch(this.value)">
+        </div>
+        ${isValue && !filterText ? `<div class="list-value-hint">값을 입력하면 해당 값이 포함된<br>모든 List와 참조 정책을 한눈에 표시합니다.</div>` : ''}
         <div id="list-names-panel"></div>
     `;
-    filterAndRenderLists(filterText);
+
+    if (isValue) {
+        if (filterText.trim()) searchListsByValue(filterText.trim());
+        else document.getElementById('main-body').innerHTML =
+            '<div class="empty-state">검색할 값을 왼쪽에 입력하세요.</div>';
+    } else {
+        filterAndRenderLists(filterText);
+    }
+}
+
+function setListSearchMode(mode) {
+    listSearchMode = mode;
+    activeListId   = null;
+    renderListsSidebar('');
+    if (mode === 'name')
+        document.getElementById('main-body').innerHTML =
+            '<div class="empty-state">왼쪽에서 List를 선택하세요.</div>';
+}
+
+function handleListSearch(value) {
+    clearTimeout(listSearchTimer);
+    if (listSearchMode === 'name') {
+        filterAndRenderLists(value);
+    } else {
+        if (!value.trim()) {
+            document.getElementById('list-names-panel').innerHTML = '';
+            document.getElementById('main-body').innerHTML =
+                '<div class="empty-state">검색할 값을 입력하세요.</div>';
+            return;
+        }
+        listSearchTimer = setTimeout(() => searchListsByValue(value.trim()), 250);
+    }
 }
 
 function filterAndRenderLists(filterText) {
@@ -935,6 +979,139 @@ function selectList(listId) {
         el.classList.toggle('active', el.dataset.listId === listId)
     );
     showListEntries(listId, '');
+}
+
+/** 값으로 전체 리스트 검색 (클라이언트 사이드) */
+function searchListsByValue(value) {
+    const lower = value.toLowerCase();
+    const matchingLists = [];
+
+    for (const [id, obj] of Object.entries(objectsMap)) {
+        const matches = obj.entries.filter(e =>
+            (e.value || '').toLowerCase().includes(lower)
+        );
+        if (matches.length) matchingLists.push({ id, obj, matches });
+    }
+    matchingLists.sort((a, b) => b.matches.length - a.matches.length);
+
+    // 사이드바: 매칭 목록
+    const panel = document.getElementById('list-names-panel');
+    if (panel) {
+        if (!matchingLists.length) {
+            panel.innerHTML = '<div class="sidebar-placeholder">일치하는 항목 없음</div>';
+        } else {
+            panel.innerHTML = matchingLists.map(({ id, obj, matches }) => `
+                <div class="list-name-item ${id === activeListId ? 'active' : ''}"
+                     data-list-id="${escapeHtml(id)}"
+                     onclick="selectList('${escapeHtml(id)}')"
+                     title="${escapeHtml(id)}">
+                    <span class="list-name-text">${escapeHtml(obj.name)}</span>
+                    <span class="list-count" style="background:var(--primary);color:white;">${matches.length}</span>
+                </div>
+            `).join('');
+        }
+    }
+
+    // 메인 패널: 통합 결과 뷰
+    renderValueSearchResults(value, matchingLists);
+}
+
+/** 값 검색 통합 결과 메인 패널 렌더링 */
+function renderValueSearchResults(value, matchingLists) {
+    const body = document.getElementById('main-body');
+    const totalEntries = matchingLists.reduce((s, l) => s + l.matches.length, 0);
+
+    body.innerHTML = '';
+
+    const header = document.createElement('div');
+    header.className = 'results-header';
+    if (!matchingLists.length) {
+        header.innerHTML = `🔍 "<strong>${escapeHtml(value)}</strong>" — 일치하는 항목이 없습니다.`;
+        body.appendChild(header);
+        return;
+    }
+    header.innerHTML =
+        `🔍 "<strong>${escapeHtml(value)}</strong>" — `
+        + `${matchingLists.length}개 리스트, ${totalEntries}개 항목`;
+    body.appendChild(header);
+
+    // 매칭 리스트 + 항목
+    matchingLists.forEach(({ id, obj, matches }) => {
+        const block = document.createElement('div');
+        block.className = 'vr-list-block';
+        block.innerHTML = `
+            <div class="vr-list-header" onclick="selectList('${escapeHtml(id)}')">
+                <span>📦</span>
+                <span style="flex:1;">${escapeHtml(obj.name)}</span>
+                <span class="vr-match-count">${matches.length}건 매칭</span>
+                <span class="vr-total-count">전체 ${obj.entries.length}개 중</span>
+            </div>
+            <div class="vr-entries">
+                ${matches.slice(0, 8).map(e => `
+                    <div class="vr-entry">
+                        <span style="flex:1;">${highlight(e.value || '', value)}</span>
+                        <span class="entry-badge">${escapeHtml(e.type)}</span>
+                    </div>
+                `).join('')}
+                ${matches.length > 8 ? `<div class="vr-entry-more">…외 ${matches.length - 8}개 더</div>` : ''}
+            </div>
+        `;
+        body.appendChild(block);
+    });
+
+    // 참조 정책 섹션
+    const policiesBar = document.createElement('div');
+    policiesBar.className = 'vr-policies-bar';
+    policiesBar.id = 'vr-policies-bar';
+    policiesBar.textContent = '이 리스트를 참조하는 정책 — 로딩 중...';
+    body.appendChild(policiesBar);
+
+    const policiesContainer = document.createElement('div');
+    policiesContainer.id = 'vr-policies-container';
+    policiesContainer.innerHTML = '<div class="loading" style="padding:16px;">정책 검색 중...</div>';
+    body.appendChild(policiesContainer);
+
+    loadPoliciesForLists(value, matchingLists, policiesBar, policiesContainer);
+}
+
+/** 매칭된 리스트를 참조하는 정책 비동기 로드 */
+async function loadPoliciesForLists(value, matchingLists, barEl, containerEl) {
+    if (!currentSetId || !matchingLists.length) {
+        barEl.textContent = '참조 정책 없음';
+        containerEl.innerHTML = '';
+        return;
+    }
+    try {
+        const seen     = new Set();
+        const policies = [];
+        for (const { obj } of matchingLists) {
+            const res  = await fetch(
+                `/api/v1/policies/${currentSetId}/search?query=${encodeURIComponent(obj.name)}`
+            );
+            const list = await res.json();
+            list.forEach(p => {
+                if (!seen.has(p._pk_auto)) {
+                    seen.add(p._pk_auto);
+                    policies.push(p);
+                }
+            });
+        }
+
+        barEl.textContent = `이 리스트를 참조하는 정책 — ${policies.length}개`;
+        containerEl.innerHTML = '';
+
+        if (!policies.length) {
+            containerEl.innerHTML = '<div style="padding:12px 14px;color:#999;font-size:12px;">참조하는 정책이 없습니다.</div>';
+            return;
+        }
+
+        const frag = document.createDocumentFragment();
+        policies.forEach(p => frag.appendChild(createPolicyRow(p, value, true)));
+        containerEl.appendChild(frag);
+    } catch(err) {
+        containerEl.innerHTML =
+            `<div style="padding:12px 14px;color:red;font-size:12px;">${escapeHtml(err.message)}</div>`;
+    }
 }
 
 function showListEntries(listId, filterText) {
