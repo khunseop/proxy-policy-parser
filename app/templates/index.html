@@ -29,7 +29,7 @@
     <div class="workspace">
 
         <!-- Left Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-tabs">
                 <button class="stab active" data-tab="policies" onclick="showTab('policies')">📋 Policy</button>
                 <button class="stab" data-tab="lists" onclick="showTab('lists')">📦 Lists</button>
@@ -40,24 +40,33 @@
             </div>
         </aside>
 
+        <!-- Sidebar Resizer -->
+        <div class="resizer resizer-sidebar" id="sidebar-resizer"></div>
+
         <!-- Main Panel -->
-        <div class="main-panel">
+        <div class="main-panel" id="main-panel">
             <div class="main-toolbar" id="main-toolbar">
                 <div class="breadcrumb-wrap">
                     <div class="breadcrumb" id="breadcrumb">
                         <span class="crumb crumb-root" onclick="loadMainContent('')">Root</span>
                     </div>
                 </div>
-                <div class="search-wrap">
-                    <input type="text" id="main-search" placeholder="정책 검색..."
-                           oninput="handleSearchInput(event)" onkeydown="handleSearchKeydown(event)">
-                    <button class="search-clear hidden" id="search-clear" onclick="clearSearch()">✕</button>
+                <div class="toolbar-right">
+                    <div class="search-wrap">
+                        <input type="text" id="main-search" placeholder="정책 검색..."
+                               oninput="handleSearchInput(event)" onkeydown="handleSearchKeydown(event)">
+                        <button class="search-clear hidden" id="search-clear" onclick="clearSearch()">✕</button>
+                    </div>
+                    <button class="btn sm" id="export-btn" onclick="exportCurrentView()" title="현재 목록 CSV 내보내기" style="display:none;">⬇️ CSV</button>
                 </div>
             </div>
             <div class="main-body" id="main-body">
                 <div class="empty-state">정책을 선택하거나 업로드하세요.</div>
             </div>
         </div>
+
+        <!-- Detail Resizer -->
+        <div class="resizer resizer-detail" id="detail-resizer"></div>
 
         <!-- Right Detail Panel -->
         <aside class="detail-panel hidden" id="detail-panel">

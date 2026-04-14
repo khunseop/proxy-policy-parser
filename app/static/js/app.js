@@ -9,6 +9,7 @@ let isSearchMode   = false;
 let selectedPk     = null; // _pk_auto of selected policy row
 let listRefPolicies= [];
 let searchTimer    = null;
+let currentViewData= [];   // currently displayed policy nodes (for CSV export)
 
 let statsData       = [];
 let statsSortedData = [];
@@ -16,7 +17,7 @@ let statsSortCol    = 'policy_count';
 let statsSortDir    = 'desc';
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
-window.onload = () => { loadHistory(); };
+window.onload = () => { loadHistory(); initResizers(); };
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 function escapeHtml(str) {
@@ -241,7 +242,10 @@ function appendTreeNode(node, container, level) {
     const name    = document.createElement('span');
     name.className  = 'node-name';
     name.textContent = node.Name || 'Unnamed';
-    name.title       = node.Name || '';
+    // Custom tooltip (shows when text is truncated)
+    name.addEventListener('mouseenter', e => showNodeTooltip(e, node.Name || ''));
+    name.addEventListener('mouseleave', hideNodeTooltip);
+    name.addEventListener('mousemove', moveNodeTooltip);
 
     row.append(toggle, icon, name);
 
@@ -293,6 +297,7 @@ async function loadMainContent(parentPath) {
     isSearchMode = false;
     currentPath  = parentPath;
     updateBreadcrumb(parentPath);
+    setExportBtn(false);
 
     const body = document.getElementById('main-body');
     body.innerHTML = '<div class="loading">로딩 중...</div>';
@@ -303,16 +308,20 @@ async function loadMainContent(parentPath) {
 
         if (!nodes.length) {
             body.innerHTML = '<div class="empty-state">하위 항목이 없습니다.</div>';
+            currentViewData = [];
             return;
         }
 
         body.innerHTML = '';
+        currentViewData = nodes;
         const frag = document.createDocumentFragment();
         nodes.forEach(n => frag.appendChild(createPolicyRow(n, null)));
         body.appendChild(frag);
         document.getElementById('policy-stats').textContent = `${nodes.length}개 항목`;
+        setExportBtn(true);
     } catch (err) {
         body.innerHTML = `<div class="empty-state" style="color:red;">${escapeHtml(err.message)}</div>`;
+        currentViewData = [];
     }
 }
 
@@ -321,6 +330,7 @@ async function loadAllPolicies() {
     isSearchMode = false;
     currentPath  = '';
     updateBreadcrumb('');
+    setExportBtn(false);
 
     const body = document.getElementById('main-body');
     body.innerHTML = '<div class="loading">로딩 중...</div>';
@@ -331,10 +341,12 @@ async function loadAllPolicies() {
 
         if (!nodes.length) {
             body.innerHTML = '<div class="empty-state">정책이 없습니다.</div>';
+            currentViewData = [];
             return;
         }
 
         body.innerHTML = '';
+        currentViewData = nodes;
         const header = document.createElement('div');
         header.className   = 'results-header';
         header.textContent = `전체 정책 — ${nodes.length}개`;
@@ -344,8 +356,10 @@ async function loadAllPolicies() {
         nodes.forEach(n => frag.appendChild(createPolicyRow(n, null, true)));
         body.appendChild(frag);
         document.getElementById('policy-stats').textContent = `${nodes.length}개 정책`;
+        setExportBtn(true);
     } catch (err) {
         body.innerHTML = `<div class="empty-state" style="color:red;">${escapeHtml(err.message)}</div>`;
+        currentViewData = [];
     }
 }
 
@@ -373,11 +387,17 @@ function createPolicyRow(node, query, showPath = false) {
     row.className = `policy-row${isGroup ? ' group-row' : ''}`;
     if (node._pk_auto && node._pk_auto === selectedPk) row.classList.add('active');
 
-    // Condition preview (short)
+    // Condition preview (2-line, highlighted for non-Always)
     let condPreview = '';
     if (node.Condition && node.Condition !== 'Always' && node.Condition !== 'None') {
-        const raw = node.Condition.length > 70 ? node.Condition.slice(0, 70) + '…' : node.Condition;
-        condPreview = `<span class="row-cond">${query ? highlight(raw, query) : escapeHtml(raw)}</span>`;
+        condPreview = `<span class="row-cond">${query ? highlight(node.Condition, query) : escapeHtml(node.Condition)}</span>`;
+    }
+
+    // Actions preview (short, rule only)
+    let actionsPreview = '';
+    if (!isGroup && node.Actions) {
+        const raw = node.Actions.length > 80 ? node.Actions.slice(0, 80) + '…' : node.Actions;
+        actionsPreview = `<span class="row-actions">${query ? highlight(raw, query) : escapeHtml(raw)}</span>`;
     }
 
     row.innerHTML = `
@@ -386,9 +406,12 @@ function createPolicyRow(node, query, showPath = false) {
             <div class="row-name">${query ? highlight(node.Name || 'Unnamed', query) : escapeHtml(node.Name || 'Unnamed')}</div>
             ${doShowPath ? `<div class="row-path">${renderClickablePath(node.Path || '')}</div>` : ''}
             <div class="row-meta">
-                <span class="badge ${enabled ? 'enabled' : 'disabled'}">${enabled ? '활성' : '비활성'}</span>
-                <span>${escapeHtml(node.Type)}</span>
-                ${condPreview ? `<span>·</span>${condPreview}` : ''}
+                <div class="row-meta-inline">
+                    <span class="badge ${enabled ? 'enabled' : 'disabled'}">${enabled ? '활성' : '비활성'}</span>
+                    <span>${escapeHtml(node.Type)}</span>
+                </div>
+                ${condPreview}
+                ${actionsPreview}
             </div>
         </div>
         ${isGroup ? '<span class="row-arrow">›</span>' : ''}
@@ -524,6 +547,7 @@ function handleSearchKeydown(event) {
 async function performSearch(query) {
     if (!currentSetId || !query) return;
     isSearchMode = true;
+    setExportBtn(false);
 
     const bar = document.getElementById('breadcrumb');
     bar.innerHTML = `<span style="color:var(--text-sec);">검색:</span> <strong>${escapeHtml(query)}</strong>`;
@@ -543,14 +567,18 @@ async function performSearch(query) {
 
         if (!results.length) {
             body.innerHTML += '<div class="empty-state">검색 결과가 없습니다.</div>';
+            currentViewData = [];
         } else {
+            currentViewData = results;
             document.getElementById('policy-stats').textContent = `${results.length}개 결과`;
             const frag = document.createDocumentFragment();
             results.forEach(n => frag.appendChild(createPolicyRow(n, query)));
             body.appendChild(frag);
+            setExportBtn(true);
         }
     } catch (err) {
         body.innerHTML = `<div class="empty-state" style="color:red;">${escapeHtml(err.message)}</div>`;
+        currentViewData = [];
     }
 }
 
@@ -968,4 +996,107 @@ function exportStatsCSV() {
     const url  = URL.createObjectURL(blob);
     Object.assign(document.createElement('a'), { href: url, download: `host-stats-${currentSetId}.csv` }).click();
     URL.revokeObjectURL(url);
+}
+
+// ─── CSV Export (current view) ────────────────────────────────────────────────
+function setExportBtn(visible) {
+    const btn = document.getElementById('export-btn');
+    if (btn) btn.style.display = visible ? '' : 'none';
+}
+
+function exportCurrentView() {
+    if (!currentViewData.length) { alert('내보낼 데이터가 없습니다.'); return; }
+    const csv = [
+        ['Name', 'Type', 'Enabled', 'Path', 'Condition', 'Actions'],
+        ...currentViewData.map(n => [
+            n.Name || '',
+            n.Type || '',
+            n.Enabled === 'true' ? '활성' : '비활성',
+            n.Path || '',
+            n.Condition || '',
+            n.Actions || ''
+        ].map(v => `"${String(v).replace(/"/g, '""')}"`))
+    ].map(r => r.join(',')).join('\n');
+
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const ts   = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+    Object.assign(document.createElement('a'), { href: url, download: `policies-${currentSetId}-${ts}.csv` }).click();
+    URL.revokeObjectURL(url);
+}
+
+// ─── Resizers ─────────────────────────────────────────────────────────────────
+function initResizers() {
+    setupResizer(
+        document.getElementById('sidebar-resizer'),
+        document.getElementById('sidebar'),
+        180, 400, false
+    );
+    setupResizer(
+        document.getElementById('detail-resizer'),
+        document.getElementById('detail-panel'),
+        300, 700, true
+    );
+}
+
+function setupResizer(handle, target, min, max, reverse) {
+    if (!handle || !target) return;
+    let startX, startW;
+
+    handle.addEventListener('mousedown', e => {
+        e.preventDefault();
+        startX = e.clientX;
+        startW = target.getBoundingClientRect().width;
+        handle.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        const onMove = e => {
+            const delta = (e.clientX - startX) * (reverse ? -1 : 1);
+            target.style.width = Math.max(min, Math.min(max, startW + delta)) + 'px';
+        };
+        const onUp = () => {
+            handle.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+}
+
+// ─── Tree Node Tooltip ────────────────────────────────────────────────────────
+let _tooltipEl = null;
+
+function showNodeTooltip(e, text) {
+    // Only show if text is actually truncated
+    const el = e.currentTarget;
+    if (el.scrollWidth <= el.clientWidth) return;
+
+    hideNodeTooltip();
+    _tooltipEl = document.createElement('div');
+    _tooltipEl.className = 'node-tooltip';
+    _tooltipEl.textContent = text;
+    document.body.appendChild(_tooltipEl);
+    positionTooltip(e);
+}
+
+function hideNodeTooltip() {
+    if (_tooltipEl) { _tooltipEl.remove(); _tooltipEl = null; }
+}
+
+function moveNodeTooltip(e) {
+    if (_tooltipEl) positionTooltip(e);
+}
+
+function positionTooltip(e) {
+    if (!_tooltipEl) return;
+    const x = e.clientX + 14;
+    const y = e.clientY + 14;
+    const w = _tooltipEl.offsetWidth;
+    const h = _tooltipEl.offsetHeight;
+    _tooltipEl.style.left = (x + w > window.innerWidth  ? x - w - 20 : x) + 'px';
+    _tooltipEl.style.top  = (y + h > window.innerHeight ? y - h - 20 : y) + 'px';
 }
