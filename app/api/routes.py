@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 from typing import Dict, Any, List
 from app.services.parser_service import ParserService
-from app.core.database import save_parsed_data, get_dict_results, delete_policy_set, clear_all_history
+from app.core.database import save_parsed_data, get_dict_results, delete_policy_set, clear_all_history, compare_policy_sets
 import os
 
 router = APIRouter()
@@ -105,6 +105,23 @@ async def top_hosts(set_id: int, limit: int = 20):
         LIMIT ?
     """
     return get_dict_results(sql, (set_id, limit))
+
+@router.get("/diff")
+async def diff_policy_sets(set_a: int = Query(...), set_b: int = Query(...)):
+    """두 정책 세트 간의 차이를 분석합니다."""
+    if set_a == set_b:
+        raise HTTPException(status_code=400, detail="두 세트가 동일합니다.")
+    sets = get_dict_results(
+        "SELECT * FROM policy_sets WHERE _pk_auto IN (?, ?)",
+        (set_a, set_b)
+    )
+    if len(sets) < 2:
+        raise HTTPException(status_code=404, detail="존재하지 않는 정책 세트입니다.")
+    try:
+        return compare_policy_sets(set_a, set_b)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/objects/{set_id}")
 async def get_objects(set_id: int):

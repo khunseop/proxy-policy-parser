@@ -202,3 +202,132 @@ def cleanup_old_sets():
                 except sqlite3.OperationalError: pass
             conn.execute(f'DELETE FROM policy_sets WHERE _pk_auto NOT IN ({placeholders})', keep_ids)
         except sqlite3.OperationalError: pass
+
+
+def compare_policy_sets(set_a_id: int, set_b_id: int) -> dict:
+    """두 정책 세트 간의 차이를 분석합니다."""
+    init_db()
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+
+        # 세트 정보 조회
+        sets_cur = conn.execute(
+            'SELECT _pk_auto AS id, filename, upload_time FROM policy_sets WHERE _pk_auto IN (?, ?)',
+            (set_a_id, set_b_id)
+        )
+        sets_map = {row['id']: dict(row) for row in sets_cur.fetchall()}
+        set_a_info = sets_map.get(set_a_id, {})
+        set_b_info = sets_map.get(set_b_id, {})
+
+        # ── 정책 비교 ──────────────────────────────────────────────
+        pol_cur = conn.execute(
+            'SELECT * FROM policies WHERE set_id IN (?, ?)',
+            (set_a_id, set_b_id)
+        )
+        map_a, map_b = {}, {}
+        for row in pol_cur.fetchall():
+            d = dict(row)
+            pid = d.get('PolicyID')
+            if not pid:
+                continue
+            if d['set_id'] == set_a_id:
+                map_a[pid] = d
+            else:
+                map_b[pid] = d
+
+        ids_a = set(map_a.keys())
+        ids_b = set(map_b.keys())
+        compare_fields = ['Name', 'Enabled', 'Condition', 'ConditionRaw', 'Actions']
+
+        pol_added   = [map_b[pid] for pid in sorted(ids_b - ids_a)]
+        pol_removed = [map_a[pid] for pid in sorted(ids_a - ids_b)]
+        pol_changed = []
+        pol_unchanged_count = 0
+
+        for pid in sorted(ids_a & ids_b):
+            a, b = map_a[pid], map_b[pid]
+            diff_fields = {}
+            for field in compare_fields:
+                va = (a.get(field) or '').strip()
+                vb = (b.get(field) or '').strip()
+                if va != vb:
+                    diff_fields[field] = {'a': a.get(field), 'b': b.get(field)}
+            if diff_fields:
+                pol_changed.append({
+                    'PolicyID': pid,
+                    'Type': a.get('Type'),
+                    'changes': diff_fields,
+                    'a': a,
+                    'b': b,
+                })
+            else:
+                pol_unchanged_count += 1
+
+        # ── 리스트 비교 ────────────────────────────────────────────
+        obj_cur = conn.execute(
+            '''SELECT set_id, list_id, list_name, list_type_id, entry_value, entry_type
+               FROM objects
+               WHERE set_id IN (?, ?)
+                 AND entry_value IS NOT NULL AND entry_value != ''
+                 AND entry_type IN ('string', 'global', 'object')''',
+            (set_a_id, set_b_id)
+        )
+        lst_a, lst_b = {}, {}
+        for row in obj_cur.fetchall():
+            d = dict(row)
+            lid = d['list_id']
+            target = lst_a if d['set_id'] == set_a_id else lst_b
+            if lid not in target:
+                target[lid] = {'name': d['list_name'], 'type': d['list_type_id'], 'values': set()}
+            target[lid]['values'].add(d['entry_value'])
+
+        lids_a = set(lst_a.keys())
+        lids_b = set(lst_b.keys())
+
+        lst_added   = [{'list_id': lid, 'list_name': lst_b[lid]['name'], 'list_type_id': lst_b[lid]['type']} for lid in sorted(lids_b - lids_a)]
+        lst_removed = [{'list_id': lid, 'list_name': lst_a[lid]['name'], 'list_type_id': lst_a[lid]['type']} for lid in sorted(lids_a - lids_b)]
+        lst_changed = []
+        lst_unchanged_count = 0
+
+        for lid in sorted(lids_a & lids_b):
+            vals_a = lst_a[lid]['values']
+            vals_b = lst_b[lid]['values']
+            if vals_a != vals_b:
+                lst_changed.append({
+                    'list_id': lid,
+                    'list_name': lst_b[lid]['name'],
+                    'list_type_id': lst_b[lid]['type'],
+                    'entries_added':   sorted(vals_b - vals_a),
+                    'entries_removed': sorted(vals_a - vals_b),
+                    'entry_count_a': len(vals_a),
+                    'entry_count_b': len(vals_b),
+                })
+            else:
+                lst_unchanged_count += 1
+
+    return {
+        'set_a': set_a_info,
+        'set_b': set_b_info,
+        'policies': {
+            'added':   pol_added,
+            'removed': pol_removed,
+            'changed': pol_changed,
+            'summary': {
+                'added':     len(pol_added),
+                'removed':   len(pol_removed),
+                'changed':   len(pol_changed),
+                'unchanged': pol_unchanged_count,
+            },
+        },
+        'lists': {
+            'added':   lst_added,
+            'removed': lst_removed,
+            'changed': lst_changed,
+            'summary': {
+                'added':     len(lst_added),
+                'removed':   len(lst_removed),
+                'changed':   len(lst_changed),
+                'unchanged': lst_unchanged_count,
+            },
+        },
+    }

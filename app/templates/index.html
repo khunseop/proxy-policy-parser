@@ -21,6 +21,7 @@
         </div>
         <div class="header-right">
             <input type="file" id="xml-upload" accept=".xml" style="display:none;" onchange="handleFileUpload()">
+            <button class="btn sm" id="diff-btn" onclick="openDiffModal()">⚖️ Diff</button>
             <button id="xml-upload-btn" class="btn primary" onclick="document.getElementById('xml-upload').click()">XML 업로드</button>
         </div>
     </header>
@@ -34,6 +35,7 @@
                 <button class="stab active" data-tab="policies" onclick="showTab('policies')">📋 Policy</button>
                 <button class="stab" data-tab="lists" onclick="showTab('lists')">📦 Lists</button>
                 <button class="stab" data-tab="stats" onclick="showTab('stats')">📊 Stats</button>
+                <button class="stab" data-tab="diff" onclick="showTab('diff')">⚖️ Diff</button>
             </div>
             <div class="sidebar-body" id="sidebar-body">
                 <div class="sidebar-placeholder">정책을 선택하거나 업로드하세요.</div>
@@ -88,6 +90,31 @@
     </footer>
 
 </div>
+<!-- Diff Modal -->
+<div id="diff-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+        <div class="modal-header">
+            <span>정책 비교 (Diff)</span>
+            <button class="btn-icon" onclick="closeDiffModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="diff-select-row">
+                <div class="diff-select-col">
+                    <label>파일 A (기준)</label>
+                    <select id="diff-select-a"></select>
+                </div>
+                <div class="diff-arrow">→</div>
+                <div class="diff-select-col">
+                    <label>파일 B (비교)</label>
+                    <select id="diff-select-b"></select>
+                </div>
+            </div>
+            <div id="diff-modal-msg" class="diff-modal-msg hidden"></div>
+            <button class="btn primary" id="diff-run-btn" onclick="runDiff()">비교 실행</button>
+        </div>
+    </div>
+</div>
+
 <script src="/static/js/app.js"></script>
 </body>
 </html>

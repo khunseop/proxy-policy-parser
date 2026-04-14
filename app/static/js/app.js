@@ -19,6 +19,12 @@ let statsSortedData = [];
 let statsSortCol    = 'policy_count';
 let statsSortDir    = 'desc';
 
+// Diff 상태
+let diffData        = null;   // 마지막 diff 결과
+let diffSetA        = null;   // 비교 A set_id
+let diffSetB        = null;   // 비교 B set_id
+let diffSection     = null;   // 현재 섹션: 'pol_added'|'pol_removed'|'pol_changed'|'lst_added'|'lst_removed'|'lst_changed'
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 window.onload = () => { loadHistory(); initResizers(); };
 
@@ -165,6 +171,7 @@ function showTab(tab) {
     if (tab === 'policies')  showPoliciesTab();
     else if (tab === 'lists') showListsTab();
     else if (tab === 'stats') showStatsTab();
+    else if (tab === 'diff')  showDiffTab();
 }
 
 function showPoliciesTab() {
@@ -1449,4 +1456,317 @@ function positionTooltip(e) {
     const h = _tooltipEl.offsetHeight;
     _tooltipEl.style.left = (x + w > window.innerWidth  ? x - w - 20 : x) + 'px';
     _tooltipEl.style.top  = (y + h > window.innerHeight ? y - h - 20 : y) + 'px';
+}
+
+// ─── Diff Feature ─────────────────────────────────────────────────────────────
+
+function openDiffModal() {
+    const selA = document.getElementById('diff-select-a');
+    const selB = document.getElementById('diff-select-b');
+    const msg  = document.getElementById('diff-modal-msg');
+    msg.classList.add('hidden');
+
+    // history 드롭다운을 그대로 복제
+    const histOpts = Array.from(document.getElementById('history-select').options)
+        .filter(o => o.value);
+
+    [selA, selB].forEach((sel, idx) => {
+        sel.innerHTML = '<option value="">선택...</option>';
+        histOpts.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.value;
+            opt.textContent = o.textContent;
+            sel.appendChild(opt);
+        });
+        // 기본 선택: A=첫번째, B=두번째
+        if (histOpts[idx]) sel.value = histOpts[idx].value;
+    });
+
+    document.getElementById('diff-modal').classList.remove('hidden');
+}
+
+function closeDiffModal() {
+    document.getElementById('diff-modal').classList.add('hidden');
+}
+
+async function runDiff() {
+    const setA = document.getElementById('diff-select-a').value;
+    const setB = document.getElementById('diff-select-b').value;
+    const msg  = document.getElementById('diff-modal-msg');
+
+    if (!setA || !setB) {
+        msg.textContent = '비교할 파일 A와 B를 모두 선택해주세요.';
+        msg.classList.remove('hidden');
+        return;
+    }
+    if (setA === setB) {
+        msg.textContent = '서로 다른 파일을 선택해주세요.';
+        msg.classList.remove('hidden');
+        return;
+    }
+
+    const btn = document.getElementById('diff-run-btn');
+    btn.disabled = true;
+    btn.textContent = '비교 중...';
+    msg.classList.add('hidden');
+
+    try {
+        const res = await fetch(`/api/v1/diff?set_a=${setA}&set_b=${setB}`);
+        if (!res.ok) {
+            const e = await res.json();
+            throw new Error(e.detail || res.statusText);
+        }
+        diffData    = await res.json();
+        diffSetA    = parseInt(setA);
+        diffSetB    = parseInt(setB);
+        diffSection = null;
+
+        closeDiffModal();
+        // Diff 탭으로 전환
+        document.querySelectorAll('.stab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'diff'));
+        currentTab = 'diff';
+        showDiffTab();
+    } catch (err) {
+        msg.textContent = '오류: ' + err.message;
+        msg.classList.remove('hidden');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '비교 실행';
+    }
+}
+
+function showDiffTab() {
+    document.getElementById('main-toolbar').style.display = 'none';
+    closeDetail();
+    if (!diffData) {
+        document.getElementById('sidebar-body').innerHTML = `
+            <div class="sidebar-placeholder">
+                헤더의 ⚖️ Diff 버튼을 클릭하여<br>비교할 파일 두 개를 선택하세요.
+            </div>`;
+        document.getElementById('main-body').innerHTML =
+            '<div class="empty-state">Diff 결과가 없습니다.</div>';
+        return;
+    }
+    renderDiffSidebar();
+    if (diffSection) {
+        renderDiffMain();
+    } else {
+        // 첫 진입 시 변경된 항목이 있는 첫 섹션 자동 선택
+        const order = ['pol_changed','pol_added','pol_removed','lst_changed','lst_added','lst_removed'];
+        const counts = getDiffCounts();
+        const first = order.find(s => counts[s] > 0);
+        if (first) selectDiffSection(first);
+        else document.getElementById('main-body').innerHTML =
+            '<div class="diff-empty">두 파일 간 차이가 없습니다.</div>';
+    }
+}
+
+function getDiffCounts() {
+    if (!diffData) return {};
+    return {
+        pol_added:   diffData.policies.summary.added,
+        pol_removed: diffData.policies.summary.removed,
+        pol_changed: diffData.policies.summary.changed,
+        lst_added:   diffData.lists.summary.added,
+        lst_removed: diffData.lists.summary.removed,
+        lst_changed: diffData.lists.summary.changed,
+    };
+}
+
+function renderDiffSidebar() {
+    const body   = document.getElementById('sidebar-body');
+    const counts = getDiffCounts();
+    const sa     = diffData.set_a;
+    const sb     = diffData.set_b;
+
+    const sections = [
+        { key: 'pol_added',   label: '생성된 정책',  type: 'added'   },
+        { key: 'pol_removed', label: '삭제된 정책',  type: 'removed' },
+        { key: 'pol_changed', label: '변경된 정책',  type: 'changed' },
+        { key: 'lst_added',   label: '생성된 리스트', type: 'added'   },
+        { key: 'lst_removed', label: '삭제된 리스트', type: 'removed' },
+        { key: 'lst_changed', label: '변경된 리스트', type: 'changed' },
+    ];
+
+    const polSum = diffData.policies.summary;
+    const lstSum = diffData.lists.summary;
+
+    body.innerHTML = `
+        <div class="diff-info-header">
+            <div><strong>A</strong>: ${escapeHtml(sa.filename || '(알 수 없음)')}</div>
+            <div><strong>B</strong>: ${escapeHtml(sb.filename || '(알 수 없음)')}</div>
+        </div>
+        <div class="diff-section-group">
+            <div class="diff-section-label">정책 (Policy)</div>
+            ${renderDiffSectionItem('pol_added',   '➕ 생성됨', counts.pol_added,   'added')}
+            ${renderDiffSectionItem('pol_removed', '➖ 삭제됨', counts.pol_removed, 'removed')}
+            ${renderDiffSectionItem('pol_changed', '✏️ 변경됨', counts.pol_changed, 'changed')}
+        </div>
+        <div class="diff-section-group">
+            <div class="diff-section-label">리스트 (List)</div>
+            ${renderDiffSectionItem('lst_added',   '➕ 생성됨', counts.lst_added,   'added')}
+            ${renderDiffSectionItem('lst_removed', '➖ 삭제됨', counts.lst_removed, 'removed')}
+            ${renderDiffSectionItem('lst_changed', '✏️ 변경됨', counts.lst_changed, 'changed')}
+        </div>
+        <div class="diff-info-header" style="margin-top:4px;font-size:10px;color:#aaa;">
+            정책: ${polSum.unchanged}개 동일 · 리스트: ${lstSum.unchanged}개 동일
+        </div>
+    `;
+}
+
+function renderDiffSectionItem(key, label, count, type) {
+    const isEmpty  = count === 0;
+    const isActive = diffSection === key;
+    const cls = ['diff-section-item', isEmpty ? 'empty' : '', isActive ? 'active' : ''].join(' ').trim();
+    const countCls = isEmpty ? 'zero' : type;
+    return `<div class="${cls}" onclick="${isEmpty ? '' : `selectDiffSection('${key}')`}">
+        ${escapeHtml(label)}
+        <span class="diff-count ${countCls}">${count}</span>
+    </div>`;
+}
+
+function selectDiffSection(section) {
+    diffSection = section;
+    renderDiffSidebar();  // 활성 상태 갱신
+    renderDiffMain();
+}
+
+function renderDiffMain() {
+    if (!diffData || !diffSection) return;
+    const main = document.getElementById('main-body');
+
+    switch (diffSection) {
+        case 'pol_added':   renderPoliciesList(diffData.policies.added,   'added',   '생성된 정책'); break;
+        case 'pol_removed': renderPoliciesList(diffData.policies.removed, 'removed', '삭제된 정책'); break;
+        case 'pol_changed': renderPoliciesChanged(diffData.policies.changed); break;
+        case 'lst_added':   renderListsList(diffData.lists.added,   'added',   '생성된 리스트'); break;
+        case 'lst_removed': renderListsList(diffData.lists.removed, 'removed', '삭제된 리스트'); break;
+        case 'lst_changed': renderListsChanged(diffData.lists.changed); break;
+    }
+}
+
+// 정책 추가/삭제 목록 렌더링
+function renderPoliciesList(items, cardType, title) {
+    const main = document.getElementById('main-body');
+    if (!items.length) {
+        main.innerHTML = `<div class="diff-empty">${escapeHtml(title)}이 없습니다.</div>`;
+        return;
+    }
+    const cards = items.map(p => {
+        const badge = `<span class="diff-type-badge">${escapeHtml(p.Type || '')}</span>`;
+        const enabledBadge = p.Enabled === 'false'
+            ? `<span class="diff-type-badge" style="background:#fdecea;color:#c0392b;">비활성</span>` : '';
+        const condHtml = p.Condition
+            ? `<div class="diff-field-row"><td class="diff-field-key">Condition</td><td class="diff-field-val">${colorCondition(p.Condition)}</td></div>` : '';
+        const actHtml  = p.Actions
+            ? `<div class="diff-field-row"><td class="diff-field-key">Actions</td><td class="diff-field-val" style="font-size:11px;color:#555;">${escapeHtml(p.Actions)}</td></div>` : '';
+        return `
+        <div class="diff-card ${escapeHtml(cardType)}">
+            <div class="diff-card-header">
+                ${badge} ${escapeHtml(p.Name || '(이름 없음)')} ${enabledBadge}
+            </div>
+            <div class="diff-card-sub">${escapeHtml(p.Path || p.PolicyID || '')}</div>
+            <table class="diff-field-table">
+                ${condHtml}${actHtml}
+            </table>
+        </div>`;
+    }).join('');
+    main.innerHTML = `<div class="diff-cards-wrap">${cards}</div>`;
+}
+
+// 변경된 정책 렌더링
+function renderPoliciesChanged(items) {
+    const main = document.getElementById('main-body');
+    if (!items.length) {
+        main.innerHTML = '<div class="diff-empty">변경된 정책이 없습니다.</div>';
+        return;
+    }
+    const cards = items.map(item => {
+        const badge = `<span class="diff-type-badge">${escapeHtml(item.Type || '')}</span>`;
+        const name  = item.changes.Name
+            ? `<del>${escapeHtml(item.changes.Name.a || '')}</del> → <ins>${escapeHtml(item.changes.Name.b || '')}</ins>`
+            : escapeHtml(item.b?.Name || item.a?.Name || '');
+
+        const fieldRows = Object.entries(item.changes).map(([field, vals]) => {
+            let beforeHtml = escapeHtml(vals.a || '');
+            let afterHtml  = escapeHtml(vals.b || '');
+            if (field === 'Condition') {
+                beforeHtml = colorCondition(vals.a || '');
+                afterHtml  = colorCondition(vals.b || '');
+            }
+            return `<tr class="diff-field-row">
+                <td class="diff-field-key">${escapeHtml(field)}</td>
+                <td class="diff-field-val">
+                    <div class="diff-val-before">${beforeHtml}</div>
+                    <div class="diff-val-after">${afterHtml}</div>
+                </td>
+            </tr>`;
+        }).join('');
+
+        return `
+        <div class="diff-card changed">
+            <div class="diff-card-header">${badge} ${name}</div>
+            <div class="diff-card-sub">${escapeHtml(item.b?.Path || item.a?.Path || item.PolicyID || '')}</div>
+            <table class="diff-field-table">${fieldRows}</table>
+        </div>`;
+    }).join('');
+    main.innerHTML = `<div class="diff-cards-wrap">${cards}</div>`;
+}
+
+// 리스트 추가/삭제 목록 렌더링
+function renderListsList(items, cardType, title) {
+    const main = document.getElementById('main-body');
+    if (!items.length) {
+        main.innerHTML = `<div class="diff-empty">${escapeHtml(title)}이 없습니다.</div>`;
+        return;
+    }
+    const cards = items.map(l => `
+        <div class="diff-card ${escapeHtml(cardType)}">
+            <div class="diff-card-header">📦 ${escapeHtml(l.list_name || '(이름 없음)')}</div>
+            <div class="diff-card-sub">${escapeHtml(l.list_id || '')}</div>
+        </div>`
+    ).join('');
+    main.innerHTML = `<div class="diff-cards-wrap">${cards}</div>`;
+}
+
+// 변경된 리스트 렌더링
+function renderListsChanged(items) {
+    const main = document.getElementById('main-body');
+    if (!items.length) {
+        main.innerHTML = '<div class="diff-empty">변경된 리스트가 없습니다.</div>';
+        return;
+    }
+    const PREVIEW = 20;
+    const cards = items.map(l => {
+        const added   = l.entries_added   || [];
+        const removed = l.entries_removed || [];
+
+        const renderEntries = (arr, type, listId) => {
+            const shown = arr.slice(0, PREVIEW);
+            const rest  = arr.length - shown.length;
+            const rows  = shown.map(v =>
+                `<div class="diff-entry-${escapeHtml(type)}">${escapeHtml(v)}</div>`
+            ).join('');
+            const more  = rest > 0
+                ? `<button class="diff-more-btn" onclick="diffExpandEntries(this,'${escapeHtml(listId)}','${escapeHtml(type)}')" data-all='${escapeHtml(JSON.stringify(arr))}'>▼ ${rest}개 더 보기</button>`
+                : '';
+            return rows + more;
+        };
+
+        return `
+        <div class="diff-card changed">
+            <div class="diff-card-header">📦 ${escapeHtml(l.list_name || '(이름 없음)')}</div>
+            <div class="diff-card-sub">${escapeHtml(l.list_id || '')} · A: ${l.entry_count_a}개 → B: ${l.entry_count_b}개</div>
+            ${renderEntries(added,   'added',   l.list_id)}
+            ${renderEntries(removed, 'removed', l.list_id)}
+        </div>`;
+    }).join('');
+    main.innerHTML = `<div class="diff-cards-wrap">${cards}</div>`;
+}
+
+function diffExpandEntries(btn, listId, type) {
+    const all = JSON.parse(btn.getAttribute('data-all'));
+    const rows = all.map(v => `<div class="diff-entry-${escapeHtml(type)}">${escapeHtml(v)}</div>`).join('');
+    btn.insertAdjacentHTML('beforebegin', rows);
+    btn.remove();
 }
