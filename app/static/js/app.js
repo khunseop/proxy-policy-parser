@@ -1,6 +1,7 @@
 let currentSetId = null;
-let objectsMap = {};       // list_id   -> { name, type, entries[] }
-let objectsNameToId = {};  // list_name -> list_id  (백엔드 이름 치환 이후 역참조용)
+let objectsMap = {};        // list_id   -> { name, type, entries[] }
+let objectsNameToId = {};   // list_name -> list_id  (백엔드 이름 치환 이후 역참조용)
+let activeListId = null;    // Lists 탭에서 현재 선택된 list_id
 
 window.onload = () => {
     loadHistory();
@@ -92,7 +93,8 @@ async function loadObjects(set_id) {
             if (obj.entry_value) {
                 objectsMap[id].entries.push({
                     value: obj.entry_value,
-                    type: obj.entry_type || 'default'
+                    type: obj.entry_type || 'default',
+                    details: obj.entry_details || ''
                 });
             }
         });
@@ -175,6 +177,111 @@ async function handleFileUpload() {
         document.getElementById('status-msg').innerText = "오류: " + err.message;
     }
 }
+
+// ─── 탭 전환 ─────────────────────────────────────────────────────────────────
+
+function showTab(tabName) {
+    const treeContainer  = document.getElementById('tree-container');
+    const listsContainer = document.getElementById('lists-container');
+    const tabPolicies    = document.getElementById('tab-policies');
+    const tabLists       = document.getElementById('tab-lists');
+
+    if (tabName === 'policies') {
+        treeContainer.style.display  = 'flex';
+        listsContainer.classList.remove('visible');
+        tabPolicies.classList.add('active');
+        tabLists.classList.remove('active');
+    } else {
+        treeContainer.style.display  = 'none';
+        listsContainer.classList.add('visible');
+        tabLists.classList.add('active');
+        tabPolicies.classList.remove('active');
+        renderListsSidebar('');
+    }
+}
+
+// ─── Lists 탭 ─────────────────────────────────────────────────────────────────
+
+function renderListsSidebar(filterText) {
+    const panel = document.getElementById('lists-names-panel');
+    const lowerFilter = (filterText || '').toLowerCase();
+
+    const entries = Object.entries(objectsMap)
+        .filter(([, obj]) => !lowerFilter || obj.name.toLowerCase().includes(lowerFilter))
+        .sort(([, a], [, b]) => a.name.localeCompare(b.name));
+
+    if (entries.length === 0) {
+        panel.innerHTML = '<div class="lists-empty-state">표시할 List가 없습니다.</div>';
+        return;
+    }
+
+    panel.innerHTML = entries.map(([listId, obj]) => `
+        <div class="list-name-item ${listId === activeListId ? 'active' : ''}"
+             onclick="selectList('${listId}')" title="${listId}">
+            <span class="list-name-text">${obj.name}</span>
+            <span class="list-count">${obj.entries.length}</span>
+        </div>
+    `).join('');
+}
+
+function filterListNames(value) {
+    renderListsSidebar(value);
+}
+
+function selectList(listId) {
+    activeListId = listId;
+    // 사이드바 active 상태 갱신
+    document.querySelectorAll('.list-name-item').forEach(el => el.classList.remove('active'));
+    const clicked = [...document.querySelectorAll('.list-name-item')]
+        .find(el => el.getAttribute('onclick') === `selectList('${listId}')`);
+    if (clicked) clicked.classList.add('active');
+
+    showListEntries(listId, '');
+}
+
+function showListEntries(listId, filterText) {
+    const obj = objectsMap[listId];
+    const panel = document.getElementById('lists-entries-panel');
+    if (!obj) { panel.innerHTML = '<div class="lists-empty-state">List를 찾을 수 없습니다.</div>'; return; }
+
+    const lower = (filterText || '').toLowerCase();
+    const filtered = obj.entries.filter(e => !lower || (e.value || '').toLowerCase().includes(lower));
+
+    const rows = filtered.map(e => `
+        <tr>
+            <td>${escapeHtml(e.value || '')}</td>
+            <td>${e.details ? `<span title="${escapeHtml(e.details)}">${escapeHtml(e.details.substring(0, 60))}${e.details.length > 60 ? '…' : ''}</span>` : ''}</td>
+            <td><span class="entry-badge">${e.type}</span></td>
+        </tr>
+    `).join('');
+
+    panel.innerHTML = `
+        <div class="lists-entries-header">
+            <h3>${obj.name}</h3>
+            <div class="list-meta">${listId} &nbsp;·&nbsp; ${filtered.length} / ${obj.entries.length} 항목</div>
+        </div>
+        <div class="lists-entries-search">
+            <input type="text" placeholder="항목 검색..." value="${escapeHtml(filterText)}"
+                   oninput="showListEntries('${listId}', this.value)">
+        </div>
+        <div class="lists-entries-table-wrap">
+            <table class="lists-entries-table">
+                <thead><tr><th>Value</th><th>Description</th><th>Type</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="3" style="text-align:center;padding:20px;color:#999;">항목 없음</td></tr>'}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function initFinder() {
     const container = document.getElementById('tree-container');

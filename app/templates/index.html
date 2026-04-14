@@ -37,10 +37,31 @@
             </div>
         </header>
 
+        <!-- 탭바 -->
+        <div class="tab-bar">
+            <button class="tab-btn active" id="tab-policies" onclick="showTab('policies')">📋 정책 트리</button>
+            <button class="tab-btn" id="tab-lists" onclick="showTab('lists')">📦 Lists</button>
+        </div>
+
         <main class="app-main">
             <!-- 가로로 확장되는 밀러 컬럼 영역 -->
             <div id="tree-container" class="tree-container">
                 <div class="loading" style="padding: 20px;">정책을 선택하거나 업로드하세요.</div>
+            </div>
+
+            <!-- Lists 탭 패널 -->
+            <div id="lists-container" class="lists-container">
+                <div class="lists-sidebar">
+                    <div class="lists-sidebar-header">
+                        <input type="text" id="list-name-filter" placeholder="List 이름 검색..." oninput="filterListNames(this.value)">
+                    </div>
+                    <div class="lists-names-panel" id="lists-names-panel">
+                        <div class="lists-empty-state">정책을 먼저 선택하세요.</div>
+                    </div>
+                </div>
+                <div class="lists-entries-panel" id="lists-entries-panel">
+                    <div class="lists-empty-state">왼쪽에서 List를 선택하세요.</div>
+                </div>
             </div>
 
             <!-- Resizer -->

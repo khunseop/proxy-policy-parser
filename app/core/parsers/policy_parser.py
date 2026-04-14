@@ -2,6 +2,7 @@ import json
 import xmltodict
 from typing import Any, List, Dict, Optional
 from .condition_parser import ConditionParser
+from app.services.xml_utils import strip_scur
 
 class PolicyParser:
     def __init__(self, source, from_xml: bool = False):
@@ -41,23 +42,24 @@ class PolicyParser:
     def _parse_actions(self, obj: Dict[str, Any]) -> str:
         summaries = []
         ac = obj.get("actionContainer")
-        if ac and isinstance(ac, dict): summaries.append(f"Action: {ac.get('@actionId')}")
+        if ac and isinstance(ac, dict):
+            summaries.append(f"Action: {strip_scur(ac.get('@actionId') or '')}")
         iac = obj.get("immediateActionContainers") or {}
         if isinstance(iac, dict):
             for sac in self._ensure_list(iac.get("setActionContainer")):
                 if isinstance(sac, dict):
-                    prop = sac.get('@propertyId', 'Unknown')
+                    prop = strip_scur(sac.get('@propertyId', 'Unknown'))
                     refs = self._extract_list_refs_recursive(sac)
                     ref_str = f" [{', '.join(set(refs))}]" if refs else ""
                     summaries.append(f"Set: {prop}{ref_str}")
             for eac in self._ensure_list(iac.get("executeActionContainer")):
                 if isinstance(eac, dict):
-                    proc = eac.get('procedureValue', {}).get('@procedureId', 'Unknown')
+                    proc = strip_scur((eac.get('procedureValue') or {}).get('@procedureId', 'Unknown'))
                     summaries.append(f"Execute: {proc}")
             for eng in self._ensure_list(iac.get("enableEngineActionContainer")):
                 if isinstance(eng, dict):
-                    engine_id = eng.get('@engineId', 'Unknown')
-                    config_id = eng.get('@configurationId', '')
+                    engine_id = strip_scur(eng.get('@engineId', 'Unknown'))
+                    config_id = strip_scur(eng.get('@configurationId', ''))
                     suffix = f"[cfg:{config_id}]" if config_id else ""
                     summaries.append(f"EnableEngine: {engine_id}{suffix}")
         return " | ".join(summaries) if summaries else "None"

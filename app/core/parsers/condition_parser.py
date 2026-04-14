@@ -1,5 +1,6 @@
 import json
 from typing import Any, Dict, List, Optional
+from app.services.xml_utils import strip_scur
 
 class ConditionParser:
     def __init__(self, condition_dict: Dict[str, Any]):
@@ -16,7 +17,7 @@ class ConditionParser:
     def _stringify_property(self, prop: Dict[str, Any]) -> str:
         """propertyInstance를 문자열로 변환 (재귀적 파라미터 처리)"""
         if not prop or not isinstance(prop, dict): return "UnknownProperty"
-        prop_id = prop.get("@propertyId", "Unknown")
+        prop_id = strip_scur(prop.get("@propertyId", "Unknown"))
         
         params_container = prop.get("parameters") or {}
         params = self._ensure_list(params_container.get("entry") if isinstance(params_container, dict) else [])
@@ -70,18 +71,18 @@ class ConditionParser:
         if "value" in param:
             return self._stringify_value(param["value"])
 
-        # Form A — 직접 속성값
+        # Form A — 직접 속성값 (com.scur. 접두사 제거 후 표시)
         list_type_id = param.get("@listTypeId")
         if list_type_id:
-            return f"List({list_type_id})"
+            return f"List({list_type_id})"  # List ID는 resolution 대상이므로 원본 유지
 
         value_id = param.get("@valueId")
         if value_id:
-            return f'"{value_id}"'
+            return f'"{strip_scur(value_id)}"'
 
         type_id = param.get("@typeId")
         if type_id:
-            return f"Type({type_id})"
+            return f"Type({strip_scur(type_id)})"
 
         return ""
 
@@ -97,7 +98,7 @@ class ConditionParser:
             prefix = exp.get("@prefix", "") # "AND", "OR", "NOT" 등
             open_brp = "(" * int(exp.get("@openingBracketCount") or 0)
             close_brp = ")" * int(exp.get("@closingBracketCount") or 0)
-            op = exp.get("@operatorId", "==")
+            op = strip_scur(exp.get("@operatorId", "=="))
             
             # 프로퍼티 추출
             prop_str = "Unknown"

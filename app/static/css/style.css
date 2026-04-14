@@ -272,6 +272,164 @@ body {
 .search-item .path { font-size: 11px; color: var(--secondary-text); }
 .loading { padding: 30px; text-align: center; color: var(--secondary-text); font-size: 13px; }
 
+/* Tab Bar */
+.tab-bar {
+    display: flex;
+    gap: 2px;
+    padding: 6px 12px 0;
+    background: #f5f5f7;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.tab-btn {
+    padding: 7px 18px;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--secondary-text);
+    border-radius: 8px 8px 0 0;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+}
+.tab-btn:hover { color: var(--text-color); background: rgba(0,0,0,0.04); }
+.tab-btn.active {
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--primary-color);
+    background: white;
+}
+
+/* Lists Panel */
+.lists-container {
+    display: none;
+    flex: 1;
+    overflow: hidden;
+    background: white;
+    height: 100%;
+}
+.lists-container.visible { display: flex; }
+
+.lists-sidebar {
+    width: 280px;
+    min-width: 280px;
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #fafafa;
+}
+.lists-sidebar-header {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color);
+    background: #f5f5f7;
+}
+.lists-sidebar-header input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    font-size: 12px;
+    background: white;
+    outline: none;
+}
+.lists-sidebar-header input:focus { border-color: var(--primary-color); }
+.lists-names-panel {
+    flex: 1;
+    overflow-y: auto;
+}
+.list-name-item {
+    padding: 9px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.12s;
+}
+.list-name-item:hover { background: var(--hover-bg); }
+.list-name-item.active { background: var(--selected-bg); color: white; }
+.list-name-item .list-name-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-name-item .list-count {
+    font-size: 10px;
+    background: rgba(0,0,0,0.08);
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 24px;
+    text-align: center;
+}
+.list-name-item.active .list-count { background: rgba(255,255,255,0.25); }
+
+.lists-entries-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.lists-entries-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background: #fbfbfd;
+    flex-shrink: 0;
+}
+.lists-entries-header h3 { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.lists-entries-header .list-meta { font-size: 11px; color: var(--secondary-text); }
+.lists-entries-search {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.lists-entries-search input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    font-size: 12px;
+    outline: none;
+}
+.lists-entries-search input:focus { border-color: var(--primary-color); }
+.lists-entries-table-wrap {
+    flex: 1;
+    overflow-y: auto;
+}
+.lists-entries-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.lists-entries-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f5f5f7;
+    padding: 8px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--secondary-text);
+    border-bottom: 1px solid var(--border-color);
+    text-transform: uppercase;
+}
+.lists-entries-table tbody td {
+    padding: 8px 16px;
+    border-bottom: 1px solid #f5f5f7;
+    font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace;
+}
+.lists-entries-table tbody tr:hover { background: #f9f9fb; }
+.entry-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #eee;
+    color: #666;
+}
+.lists-empty-state {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--secondary-text);
+    font-size: 13px;
+}
+
 /* Resizer */
 .resizer {
     width: 4px;
