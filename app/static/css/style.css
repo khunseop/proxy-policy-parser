@@ -352,6 +352,15 @@ body {
     font-family: 'SF Mono', ui-monospace, Menlo, monospace;
     color: #555;
 }
+.path-seg {
+    color: var(--primary);
+    cursor: pointer;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+.path-seg:hover { text-decoration: underline; }
+.path-seg-cur { color: #888; }
+.path-sep { color: #ccc; padding: 0 2px; }
 .row-arrow { color: #c0c0c8; font-size: 12px; flex-shrink: 0; }
 .group-row .row-arrow { color: var(--primary); }
 

@@ -171,7 +171,7 @@ function showPoliciesTab() {
         return;
     }
     renderPolicySidebar();
-    if (!isSearchMode) loadMainContent(currentPath);
+    if (!isSearchMode) loadAllPolicies();
 }
 
 function showListsTab() {
@@ -316,10 +316,59 @@ async function loadMainContent(parentPath) {
     }
 }
 
-function createPolicyRow(node, query) {
+async function loadAllPolicies() {
+    if (!currentSetId) return;
+    isSearchMode = false;
+    currentPath  = '';
+    updateBreadcrumb('');
+
+    const body = document.getElementById('main-body');
+    body.innerHTML = '<div class="loading">로딩 중...</div>';
+
+    try {
+        const res   = await fetch(`/api/v1/policies/${currentSetId}/search?query=`);
+        const nodes = await res.json();
+
+        if (!nodes.length) {
+            body.innerHTML = '<div class="empty-state">정책이 없습니다.</div>';
+            return;
+        }
+
+        body.innerHTML = '';
+        const header = document.createElement('div');
+        header.className   = 'results-header';
+        header.textContent = `전체 정책 — ${nodes.length}개`;
+        body.appendChild(header);
+
+        const frag = document.createDocumentFragment();
+        nodes.forEach(n => frag.appendChild(createPolicyRow(n, null, true)));
+        body.appendChild(frag);
+        document.getElementById('policy-stats').textContent = `${nodes.length}개 정책`;
+    } catch (err) {
+        body.innerHTML = `<div class="empty-state" style="color:red;">${escapeHtml(err.message)}</div>`;
+    }
+}
+
+// 클릭 가능한 경로 렌더링 (각 세그먼트 → 해당 경로 이동)
+function renderClickablePath(path) {
+    if (!path) return '';
+    const segs = path.split(' > ');
+    return segs.map((seg, i) => {
+        const isLast = i === segs.length - 1;
+        const prefix = i > 0 ? '<span class="path-sep">›</span>' : '';
+        if (isLast) {
+            return `${prefix}<span class="path-seg-cur">${escapeHtml(seg)}</span>`;
+        }
+        const cumPath = segs.slice(0, i + 1).join(' > ').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return `${prefix}<span class="path-seg" onclick="event.stopPropagation(); loadMainContent('${cumPath}')">${escapeHtml(seg)}</span>`;
+    }).join('');
+}
+
+function createPolicyRow(node, query, showPath = false) {
     const row     = document.createElement('div');
     const isGroup = node.Type === 'Group';
     const enabled = node.Enabled === 'true';
+    const doShowPath = showPath || !!query;
 
     row.className = `policy-row${isGroup ? ' group-row' : ''}`;
     if (node._pk_auto && node._pk_auto === selectedPk) row.classList.add('active');
@@ -335,7 +384,7 @@ function createPolicyRow(node, query) {
         <span class="row-icon">${isGroup ? '📁' : '📄'}</span>
         <div class="row-content">
             <div class="row-name">${query ? highlight(node.Name || 'Unnamed', query) : escapeHtml(node.Name || 'Unnamed')}</div>
-            ${query ? `<div class="row-path">${escapeHtml(node.Path || '')}</div>` : ''}
+            ${doShowPath ? `<div class="row-path">${renderClickablePath(node.Path || '')}</div>` : ''}
             <div class="row-meta">
                 <span class="badge ${enabled ? 'enabled' : 'disabled'}">${enabled ? '활성' : '비활성'}</span>
                 <span>${escapeHtml(node.Type)}</span>
@@ -350,11 +399,12 @@ function createPolicyRow(node, query) {
         row.classList.add('active');
         selectedPk = node._pk_auto;
 
-        if (isGroup && !query) {
+        if (isGroup && !query && !showPath) {
             loadMainContent(node.Path);
-            syncTreeSelection(node.Path);
+            autoExpandTreeToPath(node.Path);
         } else {
             openDetail(node);
+            autoExpandTreeToPath(node.Path);
         }
     };
 
@@ -365,6 +415,65 @@ function syncTreeSelection(path) {
     document.querySelectorAll('.tree-node-row').forEach(r => {
         r.classList.toggle('selected', r.dataset.path === path);
     });
+}
+
+function getTreeRowByPath(path) {
+    for (const row of document.querySelectorAll('.tree-node-row')) {
+        if (row.dataset.path === path) return row;
+    }
+    return null;
+}
+
+async function autoExpandTreeToPath(fullPath) {
+    if (!fullPath) return;
+    const segs = fullPath.split(' > ');
+
+    document.querySelectorAll('.tree-node-row.selected').forEach(r => r.classList.remove('selected'));
+
+    let cumPath = '';
+    for (let i = 0; i < segs.length; i++) {
+        cumPath = i === 0 ? segs[i] : `${cumPath} > ${segs[i]}`;
+        const isLast = i === segs.length - 1;
+
+        // 부모 경로의 children 컨테이너를 확장해서 현재 cumPath 노드를 노출
+        const parentPath = segs.slice(0, i).join(' > ');
+        const parentRow  = parentPath ? getTreeRowByPath(parentPath) : null;
+
+        if (parentPath && parentRow) {
+            const childrenEl = parentRow.nextElementSibling;
+            if (childrenEl && childrenEl.classList.contains('tree-node-children')) {
+                if (!childrenEl.dataset.loaded) {
+                    await loadTreeLevel(parentPath, childrenEl, 0);
+                    childrenEl.dataset.loaded = '1';
+                }
+                childrenEl.classList.remove('collapsed');
+                const toggle = parentRow.querySelector('.node-toggle');
+                if (toggle) toggle.textContent = '▼';
+            }
+        } else if (!parentPath) {
+            // 루트 레벨은 이미 로드되어 있음
+        }
+
+        const row = getTreeRowByPath(cumPath);
+        if (!row) break;
+
+        if (isLast) {
+            row.classList.add('selected');
+            row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } else {
+            // 이 노드의 children도 미리 열어두기
+            const childrenEl = row.nextElementSibling;
+            if (childrenEl && childrenEl.classList.contains('tree-node-children')) {
+                if (!childrenEl.dataset.loaded) {
+                    await loadTreeLevel(cumPath, childrenEl, 0);
+                    childrenEl.dataset.loaded = '1';
+                }
+                childrenEl.classList.remove('collapsed');
+                const toggle = row.querySelector('.node-toggle');
+                if (toggle) toggle.textContent = '▼';
+            }
+        }
+    }
 }
 
 // ─── Breadcrumb ───────────────────────────────────────────────────────────────
