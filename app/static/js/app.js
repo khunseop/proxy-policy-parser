@@ -195,7 +195,11 @@ function renderPolicySidebar() {
 
     const searchDiv = document.createElement('div');
     searchDiv.className = 'sidebar-search';
-    searchDiv.innerHTML = `<input type="text" placeholder="트리 검색..." oninput="handleSidebarSearch(this.value)">`;
+    searchDiv.innerHTML = `
+        <input type="text" placeholder="트리 검색..." oninput="handleSidebarSearch(this.value)">
+        <button class="btn sm" style="width:100%;margin-top:5px;color:#c0392b;border-color:#f5c6c6;"
+                onclick="findExpiredPolicies()">⏰ 만료/임박 정책 찾기</button>
+    `;
     body.appendChild(searchDiv);
 
     const root = document.createElement('div');
@@ -387,16 +391,28 @@ function createPolicyRow(node, query, showPath = false) {
     row.className = `policy-row${isGroup ? ' group-row' : ''}`;
     if (node._pk_auto && node._pk_auto === selectedPk) row.classList.add('active');
 
-    // Condition preview (2-line, highlighted for non-Always)
+    // Condition preview — formatted + syntax coloring
     let condPreview = '';
+    const expiry = detectExpiry(node.Condition || '');
     if (node.Condition && node.Condition !== 'Always' && node.Condition !== 'None') {
-        condPreview = `<span class="row-cond">${query ? highlight(node.Condition, query) : escapeHtml(node.Condition)}</span>`;
+        const formatted = formatConditionShort(node.Condition) || node.Condition;
+        condPreview = `<span class="row-cond">${colorCondition(formatted, query)}</span>`;
+    }
+
+    // Expiry badge
+    let expiryBadge = '';
+    if (expiry) {
+        if (expiry.expired) {
+            expiryBadge = `<span class="badge expired">만료 (${expiry.endDate.toLocaleDateString('ko')})</span>`;
+        } else if (expiry.expiringSoon) {
+            expiryBadge = `<span class="badge expiring">D-${expiry.daysLeft} 만료</span>`;
+        }
     }
 
     // Actions preview (short, rule only)
     let actionsPreview = '';
     if (!isGroup && node.Actions) {
-        const raw = node.Actions.length > 80 ? node.Actions.slice(0, 80) + '…' : node.Actions;
+        const raw = node.Actions.length > 90 ? node.Actions.slice(0, 90) + '…' : node.Actions;
         actionsPreview = `<span class="row-actions">${query ? highlight(raw, query) : escapeHtml(raw)}</span>`;
     }
 
@@ -409,6 +425,7 @@ function createPolicyRow(node, query, showPath = false) {
                 <div class="row-meta-inline">
                     <span class="badge ${enabled ? 'enabled' : 'disabled'}">${enabled ? '활성' : '비활성'}</span>
                     <span>${escapeHtml(node.Type)}</span>
+                    ${expiryBadge}
                 </div>
                 ${condPreview}
                 ${actionsPreview}
@@ -588,6 +605,150 @@ function clearSearch() {
     if (currentSetId && currentTab === 'policies') loadMainContent(currentPath);
 }
 
+// ─── Condition Formatting ─────────────────────────────────────────────────────
+
+/** 조건식을 단축·정리하여 읽기 쉽게 변환 */
+function formatConditionShort(cond) {
+    if (!cond || cond === 'Always' || cond === 'None') return null;
+    let s = cond;
+
+    // engine. 접두사 제거
+    s = s.replace(/\bengine\./g, '');
+
+    // operator.X → 기호/단어
+    s = s.replace(/\boperator\.isinrangelist\b/g,       '∈range');
+    s = s.replace(/\boperator\.isinlist\b/g,             '∈');
+    s = s.replace(/\boperator\.equals\b/g,               '=');
+    s = s.replace(/\boperator\.lesstan\b/g,              '<');   // 오타 variant
+    s = s.replace(/\boperator\.lessthan\b/g,             '<');
+    s = s.replace(/\boperator\.greaterthan\b/g,          '>');
+    s = s.replace(/\boperator\.lessthanorequal\b/g,      '≤');
+    s = s.replace(/\boperator\.greaterthanorequal\b/g,   '≥');
+    s = s.replace(/\boperator\.contains\b/g,             '∋');
+    s = s.replace(/\boperator\.doesnotcontain\b/g,       '∌');
+    s = s.replace(/\boperator\.startswith\b/g,           '^=');
+    s = s.replace(/\boperator\.endswith\b/g,             '$=');
+    s = s.replace(/\boperator\.matches\b/g,              '~=');
+    s = s.replace(/\boperator\.notequals?\b/g,           '≠');
+    s = s.replace(/\boperator\.\w+/g,                    m => m.replace('operator.', '?'));
+
+    // "= type.boolean.true" → 제거 (이미 참을 의미)
+    s = s.replace(/\s*=\s*"type\.boolean\.true"/g, '');
+
+    // 모듈 경로 단축
+    s = s.replace(/\bdatetimefilter\.time\./g,     '');
+    s = s.replace(/\bstringfilter\.string\./g,     '');
+    s = s.replace(/\bheaderfilter\.headers\./g,    'header.');
+    s = s.replace(/\bsystem\.url\./g,              'url.');
+    s = s.replace(/\bsystem\.client\./g,           'client.');
+    s = s.replace(/\bsystem\.request\./g,          'req.');
+    s = s.replace(/\bsystem\.response\./g,         'res.');
+    s = s.replace(/\bnetwork\./g,                  'net.');
+
+    // timeinrangeiso("YYYY-MM-DD ...", "YYYY-MM-DD ...") → [YYYY-MM-DD ~ YYYY-MM-DD]
+    s = s.replace(/timeinrangeiso\s*\(\s*"(\d{4}-\d{2}-\d{2})[^"]*"\s*,\s*"(\d{4}-\d{2}-\d{2})[^"]*"\s*\)/gi,
+        '[$1 ~ $2]');
+
+    // 소문자 and/or → 대문자 (정확한 단어만)
+    s = s.replace(/\band\b/g, 'AND').replace(/\bor\b/g, 'OR');
+
+    return s.trim();
+}
+
+/** 포맷된 조건식에 HTML 구문 색상 적용 */
+function colorCondition(text, query = '') {
+    // 1. HTML 이스케이프
+    let s = escapeHtml(text);
+    // 2. 검색어 하이라이트
+    if (query) {
+        const re = new RegExp(escapeHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        s = s.replace(re, m => `<mark>${m}</mark>`);
+    }
+    // 3. AND/OR 강조
+    s = s.replace(/\b(AND|OR)\b/g, '<span class="cond-logic">$1</span>');
+    // 4. 연산자 기호 강조
+    s = s.replace(/(∈range|∈|≤|≥|∋|∌|\^=|\$=|~=|≠|[<>=])/g,
+        '<span class="cond-op">$1</span>');
+    // 5. 함수 호출 강조 (word followed by "(")
+    s = s.replace(/(\b\w[\w.]+)\s*(?=\()/g,
+        '<span class="cond-fn">$1</span>');
+    // 6. 문자열 리터럴 강조
+    s = s.replace(/(&quot;[^&]*?&quot;)/g,
+        '<span class="cond-val">$1</span>');
+    return s;
+}
+
+/** 조건식에서 만료일 정보 추출 */
+function detectExpiry(cond) {
+    if (!cond) return null;
+    const m = cond.match(/timeinrangeiso\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/i);
+    if (!m) return null;
+
+    const startDate = new Date(m[1]);
+    const endDate   = new Date(m[2]);
+    if (isNaN(endDate)) return null;
+
+    const now      = new Date();
+    const daysLeft = Math.ceil((endDate - now) / 86400000);
+
+    return {
+        startDate, endDate, daysLeft,
+        expired:      endDate < now,
+        expiringSoon: daysLeft >= 0 && daysLeft <= 30
+    };
+}
+
+/** 만료/임박 정책만 필터링해서 메인 패널에 표시 */
+async function findExpiredPolicies() {
+    if (!currentSetId) return;
+    isSearchMode = true;
+    setExportBtn(false);
+
+    const bar = document.getElementById('breadcrumb');
+    bar.innerHTML = `<span style="color:#c0392b;font-weight:600;">⏰ 만료/임박 정책</span>`;
+
+    const body = document.getElementById('main-body');
+    body.innerHTML = '<div class="loading">전체 정책 분석 중...</div>';
+
+    try {
+        const res = await fetch(`/api/v1/policies/${currentSetId}/search?query=`);
+        const all = await res.json();
+
+        const expired      = [];
+        const expiringSoon = [];
+        all.forEach(n => {
+            const exp = detectExpiry(n.Condition || '');
+            if (!exp) return;
+            if (exp.expired)      expired.push(n);
+            else if (exp.expiringSoon) expiringSoon.push(n);
+        });
+
+        const results = [...expired, ...expiringSoon];
+        body.innerHTML = '';
+
+        const header = document.createElement('div');
+        header.className = 'results-header';
+        header.innerHTML = `⏰ 만료/임박 정책 &nbsp;—&nbsp; `
+            + `<span style="color:#c0392b;font-weight:600;">${expired.length}개 만료</span>`
+            + ` / <span style="color:#b7690a;font-weight:600;">${expiringSoon.length}개 30일 내 만료</span>`;
+        body.appendChild(header);
+
+        if (!results.length) {
+            body.innerHTML += '<div class="empty-state">만료된 정책이 없습니다.</div>';
+            currentViewData = [];
+        } else {
+            currentViewData = results;
+            const frag = document.createDocumentFragment();
+            results.forEach(n => frag.appendChild(createPolicyRow(n, null, true)));
+            body.appendChild(frag);
+            setExportBtn(true);
+        }
+    } catch(err) {
+        body.innerHTML = `<div class="empty-state" style="color:red;">${escapeHtml(err.message)}</div>`;
+        currentViewData = [];
+    }
+}
+
 function clearSearchInput() {
     const input = document.getElementById('main-search');
     if (input) input.value = '';
@@ -603,12 +764,24 @@ function openDetail(node) {
     title.textContent = node.Type === 'Group' ? '그룹 정보' : '규칙 정보';
 
     const enabled = node.Enabled === 'true';
+    const expiry  = detectExpiry(node.Condition || '');
+    let expiryBadge = '';
+    if (expiry) {
+        if (expiry.expired) {
+            expiryBadge = `<span class="badge expired">만료 (${expiry.endDate.toLocaleDateString('ko')})</span>`;
+        } else if (expiry.expiringSoon) {
+            expiryBadge = `<span class="badge expiring">D-${expiry.daysLeft} 만료</span>`;
+        } else {
+            expiryBadge = `<span class="badge enabled">유효 (∼${expiry.endDate.toLocaleDateString('ko')})</span>`;
+        }
+    }
 
     body.innerHTML = `
         <div class="detail-name">
             ${node.Type === 'Group' ? '📁' : '📄'}
             ${escapeHtml(node.Name || 'Unnamed')}
             <span class="badge ${enabled ? 'enabled' : 'disabled'}">${enabled ? '활성' : '비활성'}</span>
+            ${expiryBadge}
         </div>
         <div class="detail-path">${escapeHtml(node.Path || '')}</div>
 

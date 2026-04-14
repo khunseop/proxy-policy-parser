@@ -379,25 +379,30 @@ body {
 }
 .row-cond {
     font-family: 'SF Mono', ui-monospace, Menlo, monospace;
-    font-size: 10.5px;
-    color: #0a4a8c;
+    font-size: 11.5px;
+    color: #1a3a6c;
     background: #eef5ff;
-    padding: 2px 6px;
+    padding: 3px 8px;
     border-radius: 3px;
-    border-left: 2px solid var(--primary);
+    border-left: 3px solid var(--primary);
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
     white-space: normal;
     flex: 1 1 100%;
-    line-height: 1.45;
+    line-height: 1.55;
+    word-break: break-word;
 }
+.cond-logic { font-weight: 800; color: #6c3483; font-style: normal; }
+.cond-op    { font-weight: 700; color: #c0392b; }
+.cond-fn    { color: #1a6648; }
+.cond-val   { color: #b54a00; }
 .row-actions {
-    font-size: 10.5px;
+    font-size: 11px;
     color: #555;
     background: #f5f5f7;
-    padding: 2px 6px;
+    padding: 3px 8px;
     border-radius: 3px;
     white-space: nowrap;
     overflow: hidden;
@@ -405,6 +410,10 @@ body {
     flex: 1 1 100%;
     max-width: 100%;
 }
+
+/* Expiry badges */
+.badge.expired  { background: #ffe8e8; color: #c0392b; }
+.badge.expiring { background: #fff3cd; color: #b7690a; }
 .path-seg {
     color: var(--primary);
     cursor: pointer;
