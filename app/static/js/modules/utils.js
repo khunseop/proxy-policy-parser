@@ -25,25 +25,25 @@ export function formatConditionShort(cond) {
     // engine. 접두사 제거
     s = s.replace(/\bengine\./g, '');
 
-    // operator.X → 기호/단어
-    s = s.replace(/\boperator\.isinrangelist\b/g,       '∈range');
-    s = s.replace(/\boperator\.isinlist\b/g,             '∈');
-    s = s.replace(/\boperator\.equals\b/g,               '=');
+    // operator.X → 기호/단어 (가독성 높은 표준 기호 사용)
+    s = s.replace(/\boperator\.isinrangelist\b/g,       'in-range');
+    s = s.replace(/\boperator\.isinlist\b/g,             'in-list');
+    s = s.replace(/\boperator\.equals\b/g,               '==');
     s = s.replace(/\boperator\.lesstan\b/g,              '<');
     s = s.replace(/\boperator\.lessthan\b/g,             '<');
     s = s.replace(/\boperator\.greaterthan\b/g,          '>');
-    s = s.replace(/\boperator\.lessthanorequal\b/g,      '≤');
-    s = s.replace(/\boperator\.greaterthanorequal\b/g,   '≥');
-    s = s.replace(/\boperator\.contains\b/g,             '∋');
-    s = s.replace(/\boperator\.doesnotcontain\b/g,       '∌');
-    s = s.replace(/\boperator\.startswith\b/g,           '^=');
-    s = s.replace(/\boperator\.endswith\b/g,             '$=');
-    s = s.replace(/\boperator\.matches\b/g,              '~=');
-    s = s.replace(/\boperator\.notequals?\b/g,           '≠');
-    s = s.replace(/\boperator\.\w+/g,                    m => m.replace('operator.', '?'));
+    s = s.replace(/\boperator\.lessthanorequal\b/g,      '<=');
+    s = s.replace(/\boperator\.greaterthanorequal\b/g,   '>=');
+    s = s.replace(/\boperator\.contains\b/g,             'contains');
+    s = s.replace(/\boperator\.doesnotcontain\b/g,       'not-contains');
+    s = s.replace(/\boperator\.startswith\b/g,           'starts-with');
+    s = s.replace(/\boperator\.endswith\b/g,             'ends-with');
+    s = s.replace(/\boperator\.matches\b/g,              'matches');
+    s = s.replace(/\boperator\.notequals?\b/g,           '!=');
+    s = s.replace(/\boperator\.\w+/g,                    m => m.replace('operator.', 'op:'));
 
     // "= type.boolean.true" → 제거
-    s = s.replace(/\s*=\s*"type\.boolean\.true"/g, '');
+    s = s.replace(/\s*==\s*"type\.boolean\.true"/g, '');
 
     // 모듈 경로 단축
     s = s.replace(/\bdatetimefilter\.time\./g,     '');
@@ -69,16 +69,27 @@ export function formatConditionShort(cond) {
 export function colorCondition(text, query = '') {
     if (!text || text === 'Always' || text === 'None') return text || '';
     
-    // 이중 이스케이프 방지
-    let s = (text.includes('&lt;') || text.includes('<span')) ? text : escapeHtml(text);
+    // 1. 먼저 안전하게 이스케이프
+    let s = escapeHtml(text);
 
-    // 구문 강조
+    // 2. 이스케이프된 상태에서 구문 강조용 태그 삽입
+    // 논리 연산자
     s = s.replace(/(^|[\s\(\)])(AND|OR|NOT)(?=$|[\s\(\)])/g, '$1<span class="cond-logic">$2</span>');
-    s = s.replace(/(∈range|∈|≤|≥|∋|∌|\^=|\$=|~=|≠|[<>=])/g, '<span class="cond-op">$1</span>');
-    s = s.replace(/(\b\w[\w.]+)\s*(?=\()/g, '<span class="cond-fn">$1</span>');
-    s = s.replace(/(&quot;[^&]*?&quot;|\"[^\"]*\")/g, '<span class="cond-val">$1</span>');
+    
+    // 비교 연산자 (이미 이스케이프된 연산자 포함 처리)
+    const ops = ['==', '!=', '&lt;=', '&gt;=', '&lt;', '&gt;', 'in-range', 'in-list', 'contains', 'not-contains', 'starts-with', 'ends-with', 'matches'];
+    ops.forEach(op => {
+        const re = new RegExp(`(\\s)(${op})(\\s)`, 'g');
+        s = s.replace(re, '$1<span class="cond-op">$2</span>$3');
+    });
 
-    // 검색어 하이라이트
+    // 함수명
+    s = s.replace(/(\b\w[\w.]+)\s*(?=\()/g, '<span class="cond-fn">$1</span>');
+    
+    // 값 (따옴표 포함된 문자열) - &quot; 고려
+    s = s.replace(/(&quot;.*?&quot;)/g, '<span class="cond-val">$1</span>');
+
+    // 3. 검색어 하이라이트 (HTML 태그를 건드리지 않는 정규식 사용)
     if (query) {
         const qEsc = escapeHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const re = new RegExp(`(${qEsc})(?![^<]*>)`, 'gi');
