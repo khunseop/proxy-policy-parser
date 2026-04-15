@@ -37,8 +37,12 @@ export const api = {
         return await res.json();
     },
 
-    async searchPolicies(setId, query) {
-        const res = await fetch(`/api/v1/policies/${setId}/search?query=${encodeURIComponent(query)}`);
+    async searchPolicies(setId, params = {}) {
+        // params can be a string (legacy) or an object with filter options
+        const { query = '', enabled = '', exact = '0', fields = 'all', limit = 500 } =
+            typeof params === 'string' ? { query: params } : params;
+        const qs = new URLSearchParams({ query, enabled, exact, fields, limit });
+        const res = await fetch(`/api/v1/policies/${setId}/search?${qs}`);
         return await res.json();
     },
 

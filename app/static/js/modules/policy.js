@@ -12,10 +12,7 @@ export function renderPolicySidebar() {
 
     const searchDiv = document.createElement('div');
     searchDiv.className = 'sidebar-search';
-    searchDiv.innerHTML = `
-        <input type="text" id="sidebar-tree-search" placeholder="트리 검색...">
-        <button class="btn sm" id="find-expired-btn" style="width:100%;margin-top:5px;color:#c0392b;border-color:#f5c6c6;">⏰ 만료/임박 정책 찾기</button>
-    `;
+    searchDiv.innerHTML = `<input type="text" id="sidebar-tree-search" placeholder="트리 검색...">`;
     body.appendChild(searchDiv);
 
     const root = document.createElement('div');
@@ -336,35 +333,109 @@ export function updateBreadcrumb(path) {
     bar.innerHTML = html;
 }
 
+// ─── Filter Helpers ───────────────────────────────────────────────────────────
+export function isFiltersActive() {
+    return (
+        (document.getElementById('filter-enabled')?.value || '')    !== ''        ||
+        (document.getElementById('filter-expiry')?.value  || '')    !== ''        ||
+        (document.getElementById('filter-fields')?.value  || 'all') !== 'all'     ||
+        (document.getElementById('filter-match')?.value   || 'contains') !== 'contains'
+    );
+}
+
+function updateFilterUI() {
+    const hasActive = isFiltersActive() || !!(document.getElementById('main-search')?.value.trim());
+    document.getElementById('filter-reset-btn')?.classList.toggle('hidden', !hasActive);
+
+    const defaults = { 'filter-enabled': '', 'filter-expiry': '', 'filter-fields': 'all', 'filter-match': 'contains' };
+    Object.entries(defaults).forEach(([id, def]) => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('filter-active', el.value !== def);
+    });
+}
+
+export function applyFilters() {
+    updateFilterUI();
+    if (!state.currentSetId) return;
+    const query = document.getElementById('main-search')?.value.trim() || '';
+    if (!query && !isFiltersActive()) { clearSearch(); return; }
+    performFilteredSearch(query);
+}
+
+export function resetFilters() {
+    ['filter-enabled', 'filter-expiry', 'filter-fields', 'filter-match'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.selectedIndex = 0;
+    });
+    document.querySelectorAll('.filter-bar select').forEach(s => s.classList.remove('filter-active'));
+    document.getElementById('filter-reset-btn')?.classList.add('hidden');
+    const query = document.getElementById('main-search')?.value.trim() || '';
+    if (!query) clearSearch(); else performFilteredSearch(query);
+}
+
 // ─── Search ───────────────────────────────────────────────────────────────────
-export async function performSearch(query) {
-    if (!state.currentSetId || !query) return;
+export async function performFilteredSearch(query) {
+    if (!state.currentSetId) return;
+
+    const enabledFilter = document.getElementById('filter-enabled')?.value || '';
+    const expiryFilter  = document.getElementById('filter-expiry')?.value  || '';
+    const fieldsFilter  = document.getElementById('filter-fields')?.value  || 'all';
+    const matchFilter   = document.getElementById('filter-match')?.value   || 'contains';
+    const exact         = matchFilter === 'exact';
+
+    if (!query && !isFiltersActive()) { clearSearch(); return; }
+
     state.isSearchMode = true;
     setExportBtn(false);
 
-    const bar = document.getElementById('breadcrumb');
-    bar.innerHTML = `<span style="color:var(--text-sec);">검색:</span> <strong>${escapeHtml(query)}</strong>`;
+    // Breadcrumb label
+    const parts = [];
+    if (query)                       parts.push(`"${escapeHtml(query)}"`);
+    if (enabledFilter === 'true')    parts.push('활성');
+    if (enabledFilter === 'false')   parts.push('비활성');
+    if (expiryFilter  === 'expired') parts.push('만료됨');
+    if (expiryFilter  === 'expiring')parts.push('D-30 임박');
+    if (fieldsFilter  !== 'all')     parts.push({ name: '이름', condition: '조건', actions: '액션' }[fieldsFilter] || fieldsFilter);
+    if (exact)                       parts.push('정확히 매칭');
+
+    document.getElementById('breadcrumb').innerHTML =
+        `<span style="color:var(--text-sec);">필터:</span> ${parts.join(' · ')}`;
 
     const body = document.getElementById('main-body');
     body.innerHTML = '<div class="loading">검색 중...</div>';
 
     try {
-        const results = await api.searchPolicies(state.currentSetId, query);
+        const results = await api.searchPolicies(state.currentSetId, {
+            query,
+            enabled: enabledFilter,
+            exact: exact ? '1' : '0',
+            fields: fieldsFilter,
+            limit: expiryFilter ? 5000 : 500,
+        });
+
+        // Client-side expiry filter (timeinrangeiso is embedded in Condition text)
+        const filtered = expiryFilter
+            ? results.filter(n => {
+                const exp = detectExpiry(n.Condition || '');
+                if (!exp) return false;
+                return expiryFilter === 'expired' ? exp.expired : exp.expiringSoon;
+              })
+            : results;
 
         body.innerHTML = '';
         const header = document.createElement('div');
         header.className   = 'results-header';
-        header.textContent = `"${query}" — ${results.length}개 결과`;
+        header.textContent = `${parts.join(' · ')} — ${filtered.length}개 결과`;
         body.appendChild(header);
 
-        if (!results.length) {
+        if (!filtered.length) {
             body.innerHTML += '<div class="empty-state">검색 결과가 없습니다.</div>';
             state.currentViewData = [];
         } else {
-            state.currentViewData = results;
-            document.getElementById('policy-stats').textContent = `${results.length}개 결과`;
+            state.currentViewData = filtered;
+            document.getElementById('policy-stats').textContent = `${filtered.length}개 결과`;
             const frag = document.createDocumentFragment();
-            results.forEach(n => frag.appendChild(createPolicyRow(n, query)));
+            filtered.forEach(n => frag.appendChild(createPolicyRow(n, query || null, true)));
             body.appendChild(frag);
             setExportBtn(true);
         }
@@ -374,62 +445,16 @@ export async function performSearch(query) {
     }
 }
 
+// backward-compat alias used by tree-search
+export const performSearch = performFilteredSearch;
+
 export function clearSearch() {
     state.isSearchMode = false;
     const input = document.getElementById('main-search');
     if (input) input.value = '';
     document.getElementById('search-clear')?.classList.add('hidden');
+    updateFilterUI();
     if (state.currentSetId && state.currentTab === 'policies') loadMainContent(state.currentPath);
-}
-
-/** 만료/임박 정책만 필터링해서 메인 패널에 표시 */
-export async function findExpiredPolicies() {
-    if (!state.currentSetId) return;
-    state.isSearchMode = true;
-    setExportBtn(false);
-
-    const bar = document.getElementById('breadcrumb');
-    bar.innerHTML = `<span style="color:#c0392b;font-weight:600;">⏰ 만료/임박 정책</span>`;
-
-    const body = document.getElementById('main-body');
-    body.innerHTML = '<div class="loading">전체 정책 분석 중...</div>';
-
-    try {
-        const all = await api.searchPolicies(state.currentSetId, '');
-
-        const expired      = [];
-        const expiringSoon = [];
-        all.forEach(n => {
-            const exp = detectExpiry(n.Condition || '');
-            if (!exp) return;
-            if (exp.expired)      expired.push(n);
-            else if (exp.expiringSoon) expiringSoon.push(n);
-        });
-
-        const results = [...expired, ...expiringSoon];
-        body.innerHTML = '';
-
-        const header = document.createElement('div');
-        header.className = 'results-header';
-        header.innerHTML = `⏰ 만료/임박 정책 &nbsp;—&nbsp; `
-            + `<span style="color:#c0392b;font-weight:600;">${expired.length}개 만료</span>`
-            + ` / <span style="color:#b7690a;font-weight:600;">${expiringSoon.length}개 30일 내 만료</span>`;
-        body.appendChild(header);
-
-        if (!results.length) {
-            body.innerHTML += '<div class="empty-state">만료된 정책이 없습니다.</div>';
-            state.currentViewData = [];
-        } else {
-            state.currentViewData = results;
-            const frag = document.createDocumentFragment();
-            results.forEach(n => frag.appendChild(createPolicyRow(n, null, true)));
-            body.appendChild(frag);
-            setExportBtn(true);
-        }
-    } catch(err) {
-        body.innerHTML = `<div class="empty-state" style="color:red;">${escapeHtml(err.message)}</div>`;
-        state.currentViewData = [];
-    }
 }
 
 export function exportCurrentView() {

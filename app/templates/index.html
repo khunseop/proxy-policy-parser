@@ -62,6 +62,29 @@
                     <button class="btn sm" id="export-btn" title="현재 목록 엑셀 내보내기" style="display:none;">⬇️ Excel</button>
                 </div>
             </div>
+            <div class="filter-bar hidden" id="filter-bar">
+                <select id="filter-enabled" title="활성 여부">
+                    <option value="">전체 상태</option>
+                    <option value="true">활성만</option>
+                    <option value="false">비활성만</option>
+                </select>
+                <select id="filter-expiry" title="만료 상태">
+                    <option value="">만료: 전체</option>
+                    <option value="expired">만료됨</option>
+                    <option value="expiring">D-30 임박</option>
+                </select>
+                <select id="filter-fields" title="검색 대상">
+                    <option value="all">전체 필드</option>
+                    <option value="name">이름만</option>
+                    <option value="condition">조건만</option>
+                    <option value="actions">액션만</option>
+                </select>
+                <select id="filter-match" title="매칭 방식">
+                    <option value="contains">포함 매칭</option>
+                    <option value="exact">정확히 매칭</option>
+                </select>
+                <button class="filter-reset-btn hidden" id="filter-reset-btn">✕ 초기화</button>
+            </div>
             <div class="main-body" id="main-body">
                 <div class="empty-state">정책을 선택하거나 업로드하세요.</div>
             </div>

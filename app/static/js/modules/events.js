@@ -1,11 +1,14 @@
 import { state } from './state.js';
 import { api } from './api.js';
 import { setStatus, setLoading } from './ui.js';
-import { 
-    renderPolicySidebar, 
-    loadAllPolicies, 
-    performSearch, 
-    clearSearch, 
+import {
+    renderPolicySidebar,
+    loadAllPolicies,
+    performFilteredSearch,
+    performSearch,
+    applyFilters,
+    resetFilters,
+    clearSearch,
     exportCurrentView,
     loadMainContent
 } from './policy.js';
@@ -49,14 +52,13 @@ export function bindEvents() {
             const q = e.target.value.trim();
             document.getElementById('search-clear').classList.toggle('hidden', !q);
             clearTimeout(state.searchTimer);
-            if (!q) { clearSearch(); return; }
-            state.searchTimer = setTimeout(() => performSearch(q), 350);
+            if (!q && !isFiltersActiveLocal()) { clearSearch(); return; }
+            state.searchTimer = setTimeout(() => performFilteredSearch(q), 350);
         };
         mainSearch.onkeydown = (e) => {
             if (e.key === 'Enter') {
                 clearTimeout(state.searchTimer);
-                const q = e.target.value.trim();
-                if (q) performSearch(q);
+                performFilteredSearch(e.target.value.trim());
             } else if (e.key === 'Escape') {
                 clearSearch();
             }
@@ -65,6 +67,14 @@ export function bindEvents() {
 
     const searchClearBtn = document.getElementById('search-clear');
     if (searchClearBtn) searchClearBtn.onclick = clearSearch;
+
+    // ─── Filter Bar Events ────────────────────────────────────────────────────
+    ['filter-enabled', 'filter-expiry', 'filter-fields', 'filter-match'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.onchange = applyFilters;
+    });
+    const filterResetBtn = document.getElementById('filter-reset-btn');
+    if (filterResetBtn) filterResetBtn.onclick = resetFilters;
 
     const exportBtn = document.getElementById('export-btn');
     if (exportBtn) exportBtn.onclick = exportCurrentView;
@@ -236,13 +246,14 @@ export function showTab(tab) {
     
     if (tab === 'policies') {
         document.getElementById('main-toolbar').style.display = 'flex';
+        document.getElementById('filter-bar').classList.remove('hidden');
         if (!state.currentSetId) {
             document.getElementById('sidebar-body').innerHTML = '<div class="sidebar-placeholder">정책을 선택하세요.</div>';
             document.getElementById('main-body').innerHTML    = '<div class="empty-state">정책을 선택하거나 업로드하세요.</div>';
             return;
         }
         renderPolicySidebar();
-        // Bind dynamic events for sidebar (tree search, expired btn)
+        // Bind dynamic events for sidebar tree search
         const treeSearch = document.getElementById('sidebar-tree-search');
         if (treeSearch) {
             treeSearch.oninput = (e) => {
@@ -250,30 +261,41 @@ export function showTab(tab) {
                 const mainSearch = document.getElementById('main-search');
                 if (mainSearch) {
                     mainSearch.value = val;
-                    if (!val) { clearSearch(); return; }
-                    document.getElementById('search-clear').classList.remove('hidden');
+                    document.getElementById('search-clear').classList.toggle('hidden', !val);
                     clearTimeout(state.searchTimer);
-                    state.searchTimer = setTimeout(() => performSearch(val), 300);
+                    if (!val && !isFiltersActiveLocal()) { clearSearch(); return; }
+                    state.searchTimer = setTimeout(() => performFilteredSearch(val), 300);
                 }
             };
         }
-        const expiredBtn = document.getElementById('find-expired-btn');
-        if (expiredBtn) expiredBtn.onclick = findExpiredPolicies;
 
         if (!state.isSearchMode) loadAllPolicies();
-    } 
+    }
     else if (tab === 'lists') {
         document.getElementById('main-toolbar').style.display = 'none';
+        document.getElementById('filter-bar').classList.add('hidden');
         renderListsSidebar('');
-    } 
+    }
     else if (tab === 'stats') {
         document.getElementById('main-toolbar').style.display = 'none';
+        document.getElementById('filter-bar').classList.add('hidden');
         renderStatsSidebar();
         loadStatsData();
     } 
     else if (tab === 'diff') {
+        document.getElementById('filter-bar').classList.add('hidden');
         showDiffTab();
     }
+}
+
+// Local helper to check filter state without circular import
+function isFiltersActiveLocal() {
+    return (
+        (document.getElementById('filter-enabled')?.value || '')    !== ''        ||
+        (document.getElementById('filter-expiry')?.value  || '')    !== ''        ||
+        (document.getElementById('filter-fields')?.value  || 'all') !== 'all'     ||
+        (document.getElementById('filter-match')?.value   || 'contains') !== 'contains'
+    );
 }
 
 async function navigateToNode(node) {
