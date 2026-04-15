@@ -125,6 +125,21 @@ def save_parsed_data(filename: str, parsed_result: dict) -> int:
             drop_cols = [c for c in df.columns if c.lower() == 'id']
             if drop_cols: df = df.drop(columns=drop_cols)
             
+            # PK 오프셋 처리: 기존 데이터와의 충돌 방지 및 계층 구조 보존
+            try:
+                max_pk = conn.execute(f"SELECT MAX(_pk_auto) FROM {table_name}").fetchone()[0] or 0
+            except Exception:
+                max_pk = 0
+
+            if '_pk_auto' in df.columns:
+                df['_pk_auto'] = df['_pk_auto'] + max_pk
+                
+                # 부모 참조 필드 오프셋 적용 (policies.parent_pk, objects.parent_entry_pk)
+                ref_cols = ['parent_pk', 'parent_entry_pk']
+                for col in ref_cols:
+                    if col in df.columns:
+                        df.loc[df[col] > 0, col] = df.loc[df[col] > 0, col] + max_pk
+
             # 스키마에 정의된 컬럼만 필터링
             table_info = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
             valid_cols = [row[1] for row in table_info]
