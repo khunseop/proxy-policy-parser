@@ -3,6 +3,10 @@ from typing import Dict, Any, List
 from app.services.parser_service import ParserService
 from app.core.database import save_parsed_data, get_dict_results, delete_policy_set, clear_all_history, compare_policy_sets
 import os
+import traceback
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 service = ParserService()
@@ -22,7 +26,9 @@ async def upload_xml(file: UploadFile = File(...)):
             "summary": result["summary"]
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        tb = traceback.format_exc()
+        logger.error(f"업로드 처리 실패:\n{tb}")
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
 
 @router.get("/history")
 async def get_history():
