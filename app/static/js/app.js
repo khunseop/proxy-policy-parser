@@ -671,24 +671,30 @@ function formatConditionShort(cond) {
 
 /** 포맷된 조건식에 HTML 구문 색상 적용 */
 function colorCondition(text, query = '') {
+    if (!text) return '';
     // 1. HTML 이스케이프
     let s = escapeHtml(text);
-    // 2. 검색어 하이라이트
+
+    // 2. 구문 강조 (연산자, 함수, 값) - 태그 겹침 방지를 위해 query 하이라이트 전에 수행
+    // AND/OR/NOT 강조 (괄호와 붙어 있어도 매칭되도록 보강)
+    s = s.replace(/(^|[\s\(\)])(AND|OR|NOT)(?=$|[\s\(\)])/g, '$1<span class="cond-logic">$2</span>');
+
+    // 연산자 기호 강조
+    s = s.replace(/(∈range|∈|≤|≥|∋|∌|\^=|\$=|~=|≠|[<>=])/g, '<span class="cond-op">$1</span>');
+
+    // 함수 호출 강조
+    s = s.replace(/(\b\w[\w.]+)\s*(?=\()/g, '<span class="cond-fn">$1</span>');
+
+    // 문자열 리터럴 강조 (이미 escapeHtml로 &quot;가 된 상태)
+    s = s.replace(/(&quot;[^&]*?&quot;)/g, '<span class="cond-val">$1</span>');
+
+    // 3. 검색어 하이라이트 (태그 내부 텍스트는 건드리지 않도록 정규식 사용)
     if (query) {
-        const re = new RegExp(escapeHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-        s = s.replace(re, m => `<mark>${m}</mark>`);
+        const qEsc = escapeHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(`(${qEsc})(?![^<]*>)`, 'gi'); // 태그 밖에서만 매칭
+        s = s.replace(re, '<mark>$1</mark>');
     }
-    // 3. AND/OR 강조
-    s = s.replace(/\b(AND|OR)\b/g, '<span class="cond-logic">$1</span>');
-    // 4. 연산자 기호 강조
-    s = s.replace(/(∈range|∈|≤|≥|∋|∌|\^=|\$=|~=|≠|[<>=])/g,
-        '<span class="cond-op">$1</span>');
-    // 5. 함수 호출 강조 (word followed by "(")
-    s = s.replace(/(\b\w[\w.]+)\s*(?=\()/g,
-        '<span class="cond-fn">$1</span>');
-    // 6. 문자열 리터럴 강조
-    s = s.replace(/(&quot;[^&]*?&quot;)/g,
-        '<span class="cond-val">$1</span>');
+
     return s;
 }
 
@@ -847,7 +853,11 @@ function formatCondition(cond) {
     if (cond === 'None')
         return '<span style="color:#aaa;font-style:italic;">조건 없음</span>';
 
-    return cond.replace(/List\(([^)]+)\)/g, (match, nameOrId) => {
+    // 1. 구문 색상 적용 (colorCondition 내부에서 escapeHtml 수행)
+    let s = colorCondition(cond);
+
+    // 2. List(id) 패턴을 링크로 변환 (이미 이스케이프된 텍스트 "List(id)"를 찾아서 태그로 치환)
+    s = s.replace(/List\(([^)]+)\)/g, (match, nameOrId) => {
         let listId = nameOrId;
         let obj    = objectsMap[nameOrId];
         if (!obj && objectsNameToId[nameOrId]) {
@@ -857,6 +867,8 @@ function formatCondition(cond) {
         const display = obj ? (obj.name || nameOrId) : nameOrId;
         return `<span class="list-link" onclick="showObjectDetail('${escapeHtml(listId)}')" title="${escapeHtml(listId)}">${escapeHtml(display)}</span>`;
     });
+
+    return s;
 }
 
 function showObjectDetail(listId) {

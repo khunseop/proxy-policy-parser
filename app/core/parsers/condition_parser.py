@@ -112,14 +112,15 @@ class ConditionParser:
                 val_str = self._stringify_parameter(param)
 
             # 조합
-            # i==0이어도 "NOT" prefix가 있을 수 있으므로 인덱스와 무관하게 처리
             part = ""
             if i == 0:
                 if prefix:
                     part += f"{prefix} "
             else:
+                # 연산자 앞뒤로 확실한 공백 보장
                 part += f" {prefix} " if prefix else " AND "
 
+            # 괄호와 프로퍼티 사이에도 공백을 주어 프론트엔드 정규식(\b) 매칭 신뢰도 향상
             part += f"{open_brp}{prop_str} {op} {val_str}{close_brp}"
             full_parts.append(part)
 
