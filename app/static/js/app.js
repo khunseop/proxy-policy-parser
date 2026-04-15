@@ -671,12 +671,14 @@ function formatConditionShort(cond) {
 
 /** 포맷된 조건식에 HTML 구문 색상 적용 */
 function colorCondition(text, query = '') {
-    if (!text) return '';
-    // 1. HTML 이스케이프
-    let s = escapeHtml(text);
+    if (!text || text === 'Always' || text === 'None') return text || '';
+    
+    // 만약 이미 HTML 태그가 포함되어 있다면(이스케이프된 태그 문자열 포함), 중복 이스케이프 방지
+    // 보통 &lt; 가 포함되어 있다면 이미 이스케이프된 것으로 간주
+    let s = (text.includes('&lt;') || text.includes('<span')) ? text : escapeHtml(text);
 
-    // 2. 구문 강조 (연산자, 함수, 값) - 태그 겹침 방지를 위해 query 하이라이트 전에 수행
-    // AND/OR/NOT 강조 (괄호와 붙어 있어도 매칭되도록 보강)
+    // 2. 구문 강조 (연산자, 함수, 값)
+    // AND/OR/NOT 강조 (괄호와 붙어 있어도 매칭되도록 보류)
     s = s.replace(/(^|[\s\(\)])(AND|OR|NOT)(?=$|[\s\(\)])/g, '$1<span class="cond-logic">$2</span>');
 
     // 연산자 기호 강조
@@ -685,17 +687,27 @@ function colorCondition(text, query = '') {
     // 함수 호출 강조
     s = s.replace(/(\b\w[\w.]+)\s*(?=\()/g, '<span class="cond-fn">$1</span>');
 
-    // 문자열 리터럴 강조 (이미 escapeHtml로 &quot;가 된 상태)
-    s = s.replace(/(&quot;[^&]*?&quot;)/g, '<span class="cond-val">$1</span>');
+    // 문자열 리터럴 강조 (이미 escapeHtml로 &quot;가 된 상태이거나 " 상태)
+    s = s.replace(/(&quot;[^&]*?&quot;|\"[^\"]*\")/g, '<span class="cond-val">$1</span>');
 
     // 3. 검색어 하이라이트 (태그 내부 텍스트는 건드리지 않도록 정규식 사용)
     if (query) {
         const qEsc = escapeHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(`(${qEsc})(?![^<]*>)`, 'gi'); // 태그 밖에서만 매칭
+        // HTML 태그 외부에서만 매칭되도록 하는 정규식: (검색어)(?![^<]*>)
+        const re = new RegExp(`(${qEsc})(?![^<]*>)`, 'gi');
         s = s.replace(re, '<mark>$1</mark>');
     }
 
     return s;
+}
+
+function toggleRawCondition() {
+    const fmt = document.getElementById('detail-cond-formatted');
+    const raw = document.getElementById('detail-cond-raw');
+    if (fmt && raw) {
+        fmt.classList.toggle('hidden');
+        raw.classList.toggle('hidden');
+    }
 }
 
 /** 조건식에서 만료일 정보 추출 */
@@ -806,8 +818,12 @@ function openDetail(node) {
         <div class="detail-path">${escapeHtml(node.Path || '')}</div>
 
         <div class="detail-section">
-            <span class="detail-label">조건 (Condition)</span>
-            <div class="detail-value condition">${formatCondition(node.Condition)}</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span class="detail-label">조건 (Condition)</span>
+                <button class="btn-text" style="font-size:10px;" onclick="toggleRawCondition()">원본 보기</button>
+            </div>
+            <div class="detail-value condition" id="detail-cond-formatted">${formatCondition(node.Condition)}</div>
+            <div class="detail-value condition hidden" id="detail-cond-raw" style="font-family:monospace; font-size:11px; background:#f8f8f8; white-space:pre-wrap; border:1px dashed #ccc;">${escapeHtml(JSON.stringify(JSON.parse(node.ConditionRaw || '{}'), null, 2))}</div>
         </div>
 
         ${node.Type === 'Rule' && node.Actions ? `
