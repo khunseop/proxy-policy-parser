@@ -13,16 +13,16 @@
     <header class="app-header">
         <div class="logo">Skyhigh Policy Explorer</div>
         <div class="header-mid">
-            <select id="history-select" onchange="handleSetChange()">
+            <select id="history-select">
                 <option value="">정책 선택...</option>
             </select>
-            <button class="btn-icon" title="현재 이력 삭제" onclick="handleDeleteCurrentSet()">🗑️</button>
-            <button class="btn-icon" title="전체 히스토리 초기화" onclick="handleClearAllHistory()">🧹</button>
+            <button class="btn-icon" title="현재 이력 삭제" id="header-delete-btn">🗑️</button>
+            <button class="btn-icon" title="전체 히스토리 초기화" id="header-clear-btn">🧹</button>
         </div>
         <div class="header-right">
-            <input type="file" id="xml-upload" accept=".xml" style="display:none;" onchange="handleFileUpload()">
-            <button class="btn sm" id="diff-btn" onclick="openDiffModal()">⚖️ Diff</button>
-            <button id="xml-upload-btn" class="btn primary" onclick="document.getElementById('xml-upload').click()">XML 업로드</button>
+            <input type="file" id="xml-upload" accept=".xml" style="display:none;">
+            <button class="btn sm" id="diff-btn">⚖️ Diff</button>
+            <button id="xml-upload-btn" class="btn primary">XML 업로드</button>
         </div>
     </header>
 
@@ -32,10 +32,10 @@
         <!-- Left Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-tabs">
-                <button class="stab active" data-tab="policies" onclick="showTab('policies')">📋 Policy</button>
-                <button class="stab" data-tab="lists" onclick="showTab('lists')">📦 Lists</button>
-                <button class="stab" data-tab="stats" onclick="showTab('stats')">📊 Stats</button>
-                <button class="stab" data-tab="diff" onclick="showTab('diff')">⚖️ Diff</button>
+                <button class="stab active" data-tab="policies">📋 Policy</button>
+                <button class="stab" data-tab="lists">📦 Lists</button>
+                <button class="stab" data-tab="stats">📊 Stats</button>
+                <button class="stab" data-tab="diff">⚖️ Diff</button>
             </div>
             <div class="sidebar-body" id="sidebar-body">
                 <div class="sidebar-placeholder">정책을 선택하거나 업로드하세요.</div>
@@ -50,16 +50,15 @@
             <div class="main-toolbar" id="main-toolbar">
                 <div class="breadcrumb-wrap">
                     <div class="breadcrumb" id="breadcrumb">
-                        <span class="crumb crumb-root" onclick="loadMainContent('')">Root</span>
+                        <span class="crumb crumb-root" data-path="">Root</span>
                     </div>
                 </div>
                 <div class="toolbar-right">
                     <div class="search-wrap">
-                        <input type="text" id="main-search" placeholder="정책 검색..."
-                               oninput="handleSearchInput(event)" onkeydown="handleSearchKeydown(event)">
-                        <button class="search-clear hidden" id="search-clear" onclick="clearSearch()">✕</button>
+                        <input type="text" id="main-search" placeholder="정책 검색...">
+                        <button class="search-clear hidden" id="search-clear">✕</button>
                     </div>
-                    <button class="btn sm" id="export-btn" onclick="exportCurrentView()" title="현재 목록 CSV 내보내기" style="display:none;">⬇️ CSV</button>
+                    <button class="btn sm" id="export-btn" title="현재 목록 CSV 내보내기" style="display:none;">⬇️ CSV</button>
                 </div>
             </div>
             <div class="main-body" id="main-body">
@@ -74,7 +73,7 @@
         <aside class="detail-panel hidden" id="detail-panel">
             <div class="detail-header">
                 <span class="detail-title" id="detail-title">상세 정보</span>
-                <button class="btn-icon" onclick="closeDetail()">✕</button>
+                <button class="btn-icon">✕</button>
             </div>
             <div class="detail-body" id="detail-body">
                 <div class="empty-state" style="margin-top:40px;">항목을 선택하세요.</div>
@@ -95,7 +94,7 @@
     <div class="modal-box">
         <div class="modal-header">
             <span>정책 비교 (Diff)</span>
-            <button class="btn-icon" onclick="closeDiffModal()">✕</button>
+            <button class="btn-icon">✕</button>
         </div>
         <div class="modal-body">
             <div class="diff-select-row">
@@ -110,11 +109,11 @@
                 </div>
             </div>
             <div id="diff-modal-msg" class="diff-modal-msg hidden"></div>
-            <button class="btn primary" id="diff-run-btn" onclick="runDiff()">비교 실행</button>
+            <button class="btn primary" id="diff-run-btn">비교 실행</button>
         </div>
     </div>
 </div>
 
-<script src="/static/js/app.js"></script>
+<script src="/static/js/main.js" type="module"></script>
 </body>
 </html>

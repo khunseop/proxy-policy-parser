@@ -1,0 +1,113 @@
+/* ── Sidebar ── */
+.sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: #ededf0;
+    flex-shrink: 0;
+}
+
+.stab {
+    flex: 1;
+    padding: 7px 2px;
+    border: none;
+    background: transparent;
+    font-size: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--text-sec);
+    border-bottom: 2px solid transparent;
+    transition: all 0.12s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.stab:hover { color: var(--text); background: rgba(0,0,0,0.05); }
+.stab.active {
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary);
+    background: var(--sidebar-bg);
+}
+
+.sidebar-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.sidebar-placeholder {
+    padding: 20px 12px;
+    font-size: 12px;
+    color: var(--text-sec);
+    text-align: center;
+}
+
+/* Sidebar tree (policy tab) */
+.sidebar-search {
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    background: #f5f5f7;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+.sidebar-search input {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 11px;
+    outline: none;
+    background: white;
+}
+.sidebar-search input:focus { border-color: var(--primary); }
+
+/* Custom tooltip for truncated tree nodes */
+.node-tooltip {
+    position: fixed;
+    background: #1d1d1f;
+    color: #f5f5f7;
+    padding: 5px 9px;
+    border-radius: 5px;
+    font-size: 11px;
+    white-space: pre-wrap;
+    max-width: 300px;
+    word-break: break-word;
+    pointer-events: none;
+    z-index: 9999;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+    line-height: 1.4;
+}
+
+/* Tree nodes */
+.tree-node { display: flex; flex-direction: column; }
+.tree-node-row {
+    display: flex;
+    align-items: center;
+    padding: 5px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.1s;
+    user-select: none;
+    border-bottom: 1px solid rgba(0,0,0,0.03);
+    gap: 3px;
+}
+.tree-node-row:hover { background: var(--hover-bg); }
+.tree-node-row.selected { background: var(--sel-bg); color: white; }
+.node-toggle { width: 12px; font-size: 8px; opacity: 0.45; flex-shrink: 0; text-align: center; }
+.tree-node-row.selected .node-toggle { opacity: 0.9; }
+.node-icon { font-size: 12px; flex-shrink: 0; }
+.node-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-node-children { padding-left: 12px; }
+.tree-node-children.collapsed { display: none; }
+.tree-loading { padding: 6px 10px; font-size: 11px; color: var(--text-sec); }
