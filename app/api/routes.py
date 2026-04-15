@@ -58,15 +58,40 @@ async def get_policies(set_id: int, parent_path: str = Query("")):
     return get_dict_results(query, (set_id, parent_path))
 
 @router.get("/policies/{set_id}/search")
-async def search_policies(set_id: int, query: str = Query(...)):
-    search_pattern = f"%{query}%"
-    sql = """
-        SELECT * FROM policies 
-        WHERE set_id = ? 
-        AND (Name LIKE ? OR Condition LIKE ? OR Actions LIKE ? OR Path LIKE ?)
-        LIMIT 200
-    """
-    return get_dict_results(sql, (set_id, search_pattern, search_pattern, search_pattern, search_pattern))
+async def search_policies(
+    set_id: int,
+    query: str = Query(""),
+    enabled: str = Query(""),
+    exact: str = Query("0"),
+    fields: str = Query("all"),
+    limit: int = Query(500),
+):
+    conditions = ["set_id = ?"]
+    params: list = [set_id]
+
+    if enabled in ("true", "false"):
+        conditions.append("Enabled = ?")
+        params.append(enabled)
+
+    if query:
+        is_exact = exact == "1"
+        q_param  = query if is_exact else f"%{query}%"
+        op       = "=" if is_exact else "LIKE"
+        col_map  = {
+            "name":      ["Name"],
+            "condition": ["Condition"],
+            "actions":   ["Actions"],
+            "all":       ["Name", "Condition", "Actions", "Path"],
+        }
+        cols = col_map.get(fields, col_map["all"])
+        search_clause = " OR ".join(f"{c} {op} ?" for c in cols)
+        conditions.append(f"({search_clause})")
+        params.extend([q_param] * len(cols))
+
+    where = " AND ".join(conditions)
+    sql   = f"SELECT * FROM policies WHERE {where} LIMIT ?"
+    params.append(min(limit, 5000))
+    return get_dict_results(sql, params)
 
 @router.get("/analysis/{set_id}/value-lookup")
 async def value_lookup(set_id: int, value: str = Query(...)):
