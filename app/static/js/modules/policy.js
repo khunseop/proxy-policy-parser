@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { api } from './api.js';
 import { escapeHtml, highlight, formatConditionShort, colorCondition, detectExpiry } from './utils.js';
-import { setExportBtn, showNodeTooltip, hideNodeTooltip, moveNodeTooltip } from './ui.js';
+import { setExportBtn, setLoading, showNodeTooltip, hideNodeTooltip, moveNodeTooltip } from './ui.js';
 import { openDetail } from './detail.js';
 
 // ─── Policy Sidebar Tree ──────────────────────────────────────────────────────
@@ -434,21 +434,111 @@ export async function findExpiredPolicies() {
 
 export function exportCurrentView() {
     if (!state.currentViewData.length) { alert('내보낼 데이터가 없습니다.'); return; }
-    const csv = [
-        ['Name', 'Type', 'Enabled', 'Path', 'Condition', 'Actions'],
-        ...state.currentViewData.map(n => [
-            n.Name || '',
-            n.Type || '',
-            n.Enabled === 'true' ? '활성' : '비활성',
-            n.Path || '',
-            n.Condition || '',
-            n.Actions || ''
-        ].map(v => `"${String(v).replace(/"/g, '""')}"`))
-    ].map(r => r.join(',')).join('\n');
 
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const ts   = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
-    Object.assign(document.createElement('a'), { href: url, download: `policies-${state.currentSetId}-${ts}.csv` }).click();
-    URL.revokeObjectURL(url);
+    setLoading(true, '엑셀 파일 생성 중...');
+
+    try {
+        const sheet1Data = [
+            ['Name', 'Type', 'Enabled', 'Path', 'Condition', 'Actions', 'Referenced Lists']
+        ];
+
+        const referencedLists = new Set();
+        const policyRefs = [];
+
+        // 참조 리스트 추출
+        state.currentViewData.forEach(n => {
+            const cond = n.Condition || '';
+            const listIds = [];
+            const re = /List\(([^)]+)\)/g;
+            let match;
+            while ((match = re.exec(cond)) !== null) {
+                const nameOrId = match[1];
+                let listId = nameOrId;
+                if (!state.objectsMap[nameOrId] && state.objectsNameToId[nameOrId]) {
+                    listId = state.objectsNameToId[nameOrId];
+                }
+                if (state.objectsMap[listId]) {
+                    listIds.push(listId);
+                    referencedLists.add(listId);
+                }
+            }
+            policyRefs.push(listIds);
+        });
+
+        // Sheet 2: Referenced Lists 데이터 구성
+        const sheet2Data = [
+            ['List Name', 'List ID', 'Value', 'Type', 'Description']
+        ];
+        const listRowMap = {};
+        let currentRow = 2; // 헤더는 1행
+
+        referencedLists.forEach(listId => {
+            listRowMap[listId] = currentRow;
+            const obj = state.objectsMap[listId];
+            if (obj && obj.entries) {
+                if (obj.entries.length === 0) {
+                    sheet2Data.push([obj.name || '', listId, '(빈 리스트)', '', '']);
+                    currentRow++;
+                } else {
+                    obj.entries.forEach(e => {
+                        sheet2Data.push([
+                            obj.name || '',
+                            listId,
+                            e.value || '',
+                            e.type || '',
+                            e.details || ''
+                        ]);
+                        currentRow++;
+                    });
+                }
+            }
+        });
+
+        // Sheet 1: Policies 데이터 구성
+        state.currentViewData.forEach((n, idx) => {
+            const listsUsed = policyRefs[idx];
+            const listNames = listsUsed.map(id => state.objectsMap[id].name).join(', ');
+
+            sheet1Data.push([
+                n.Name || '',
+                n.Type || '',
+                n.Enabled === 'true' ? '활성' : '비활성',
+                n.Path || '',
+                n.Condition || '',
+                n.Actions || '',
+                listNames
+            ]);
+        });
+
+        const wb = XLSX.utils.book_new();
+        const ws1 = XLSX.utils.aoa_to_sheet(sheet1Data);
+        const ws2 = XLSX.utils.aoa_to_sheet(sheet2Data);
+
+        // 하이퍼링크 적용 (첫 번째 참조 리스트로 연결)
+        policyRefs.forEach((listsUsed, idx) => {
+            if (listsUsed.length > 0) {
+                const firstListId = listsUsed[0];
+                const targetRow = listRowMap[firstListId];
+                if (targetRow) {
+                    const cellRef = XLSX.utils.encode_cell({ c: 6, r: idx + 1 });
+                    if (!ws1[cellRef]) ws1[cellRef] = { t: 's', v: sheet1Data[idx + 1][6] };
+                    ws1[cellRef].l = { 
+                        Target: `#'Referenced Lists'!A${targetRow}`, 
+                        Tooltip: "클릭하여 리스트 상세 정보로 이동" 
+                    };
+                }
+            }
+        });
+
+        XLSX.utils.book_append_sheet(wb, ws1, "Policies");
+        XLSX.utils.book_append_sheet(wb, ws2, "Referenced Lists");
+
+        const ts = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+        XLSX.writeFile(wb, `policies-${state.currentSetId}-${ts}.xlsx`);
+    } catch (err) {
+        console.error('엑셀 내보내기 실패:', err);
+        alert('엑셀 파일 생성 중 오류가 발생했습니다: ' + err.message);
+    } finally {
+        setLoading(false);
+    }
 }

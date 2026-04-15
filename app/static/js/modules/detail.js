@@ -36,10 +36,8 @@ export function openDetail(node) {
         <div class="detail-section">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <span class="detail-label">조건 (Condition)</span>
-                <button class="btn-text" id="toggle-raw-cond-btn" style="font-size:10px;">원본 보기</button>
             </div>
             <div class="detail-value condition" id="detail-cond-formatted">${formatCondition(node.Condition)}</div>
-            <div class="detail-value condition hidden" id="detail-cond-raw" style="font-family:monospace; font-size:11px; background:#f8f8f8; white-space:pre-wrap; border:1px dashed #ccc;">${escapeHtml(JSON.stringify(JSON.parse(node.ConditionRaw || '{}'), null, 2))}</div>
         </div>
 
         ${node.Type === 'Rule' && node.Actions ? `
@@ -72,8 +70,13 @@ export function openDetail(node) {
         <div id="object-inline-view"></div>
     `;
 
-    // Bind dynamic event for toggle button
-    document.getElementById('toggle-raw-cond-btn').onclick = toggleRawCondition;
+    // 이벤트 위임을 사용하여 클릭 시 리스트 상세 정보 표시
+    const condFmt = document.getElementById('detail-cond-formatted');
+    if (condFmt) {
+        condFmt.querySelectorAll('.list-link').forEach(el => {
+            el.onclick = () => showObjectDetail(el.dataset.listId);
+        });
+    }
 }
 
 export function closeDetail() {
@@ -99,20 +102,10 @@ export function formatCondition(cond) {
             obj    = state.objectsMap[listId];
         }
         const display = obj ? (obj.name || nameOrId) : nameOrId;
-        // In modules, we can't easily use inline onclick. We'll use data-list-id and delegation or direct binding.
         return `<span class="list-link" data-list-id="${escapeHtml(listId)}" title="${escapeHtml(listId)}">${escapeHtml(display)}</span>`;
     });
 
     return s;
-}
-
-export function toggleRawCondition() {
-    const fmt = document.getElementById('detail-cond-formatted');
-    const raw = document.getElementById('detail-cond-raw');
-    if (fmt && raw) {
-        fmt.classList.toggle('hidden');
-        raw.classList.toggle('hidden');
-    }
 }
 
 export function showObjectDetail(listId) {
