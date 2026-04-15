@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { api } from './api.js';
+import { setLoading } from './ui.js';
 import { escapeHtml, highlight } from './utils.js';
 import { createPolicyRow } from './policy.js';
 
@@ -135,6 +136,69 @@ export function searchListsByValue(value) {
     renderValueSearchResults(value, matchingLists);
 }
 
+/**
+ * 검색 결과를 엑셀 파일로 내보냄 (SheetJS 사용)
+ */
+export async function exportListSearchResultsExcel(value, matchingLists) {
+    if (!matchingLists || !matchingLists.length) {
+        alert('내보낼 데이터가 없습니다.');
+        return;
+    }
+
+    setLoading(true, '엑셀 파일 생성 중...');
+    try {
+        // Sheet 1: 매칭된 리스트 정보 및 매칭된 값
+        const sheet1Data = [
+            ['List Name', 'List ID', 'Matched Value', 'Type', 'Description']
+        ];
+        matchingLists.forEach(({ id, obj, matches }) => {
+            matches.forEach(e => {
+                sheet1Data.push([
+                    obj.name || '',
+                    id || '',
+                    e.value || '',
+                    e.type || '',
+                    e.details || ''
+                ]);
+            });
+        });
+
+        // Sheet 2: 참조하는 정책 정보 및 매칭된 리스트
+        const sheet2Data = [
+            ['Policy Name', 'Policy Type', 'Policy Path', 'Enabled', 'Condition', 'Referenced List Name']
+        ];
+
+        // 각 리스트별로 참조 정책을 가져와서 시트 데이터 구성
+        for (const { obj } of matchingLists) {
+            const policies = await api.searchPolicies(state.currentSetId, obj.name);
+            policies.forEach(p => {
+                sheet2Data.push([
+                    p.Name || '',
+                    p.Type || '',
+                    p.Path || '',
+                    p.Enabled === 'true' ? '활성' : '비활성',
+                    p.Condition || '',
+                    obj.name || ''
+                ]);
+            });
+        }
+
+        const wb = XLSX.utils.book_new();
+        const ws1 = XLSX.utils.aoa_to_sheet(sheet1Data);
+        const ws2 = XLSX.utils.aoa_to_sheet(sheet2Data);
+
+        XLSX.utils.book_append_sheet(wb, ws1, "Matched Lists");
+        XLSX.utils.book_append_sheet(wb, ws2, "Referenced Policies");
+
+        XLSX.writeFile(wb, `List_Search_Results_${value}.xlsx`);
+    } catch (err) {
+        console.error('엑셀 내보내기 실패:', err);
+        alert('엑셀 파일 생성 중 오류가 발생했습니다: ' + err.message);
+    } finally {
+        setLoading(false);
+    }
+}
+
 function renderValueSearchResults(value, matchingLists) {
     const body = document.getElementById('main-body');
     const totalEntries = matchingLists.reduce((s, l) => s + l.matches.length, 0);
@@ -148,10 +212,18 @@ function renderValueSearchResults(value, matchingLists) {
         body.appendChild(header);
         return;
     }
-    header.innerHTML =
-        `🔍 "<strong>${escapeHtml(value)}</strong>" — `
-        + `${matchingLists.length}개 리스트, ${totalEntries}개 항목`;
+    header.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            <span>🔍 "<strong>${escapeHtml(value)}</strong>" — ${matchingLists.length}개 리스트, ${totalEntries}개 항목</span>
+            <button class="btn sm" id="list-export-btn" title="검색 결과 엑셀 내보내기">⬇️ Excel 저장</button>
+        </div>
+    `;
     body.appendChild(header);
+
+    const exportBtn = document.getElementById('list-export-btn');
+    if (exportBtn) {
+        exportBtn.onclick = () => exportListSearchResultsExcel(value, matchingLists);
+    }
 
     matchingLists.forEach(({ id, obj, matches }) => {
         const block = document.createElement('div');
