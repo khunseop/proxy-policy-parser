@@ -331,3 +331,24 @@ def compare_policy_sets(set_a_id: int, set_b_id: int) -> dict:
             },
         },
     }
+
+
+def get_policy_stats(set_id: int) -> dict:
+    init_db()
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        total = conn.execute("SELECT COUNT(*) FROM policies WHERE set_id=?", (set_id,)).fetchone()[0]
+        type_rows = conn.execute("SELECT Type, COUNT(*) as cnt FROM policies WHERE set_id=? GROUP BY Type", (set_id,)).fetchall()
+        rules  = next((r['cnt'] for r in type_rows if r['Type'] == 'Rule'),  0)
+        groups = next((r['cnt'] for r in type_rows if r['Type'] == 'Group'), 0)
+        en_rows = conn.execute("SELECT Enabled, COUNT(*) as cnt FROM policies WHERE set_id=? AND Type='Rule' GROUP BY Enabled", (set_id,)).fetchall()
+        enabled  = next((r['cnt'] for r in en_rows if r['Enabled'] == 'true'),  0)
+        disabled = next((r['cnt'] for r in en_rows if r['Enabled'] == 'false'), 0)
+        block = conn.execute("SELECT COUNT(*) FROM policies WHERE set_id=? AND LOWER(Actions) LIKE '%block%'", (set_id,)).fetchone()[0]
+        unconditional = conn.execute("SELECT COUNT(*) FROM policies WHERE set_id=? AND Type='Rule' AND (Condition IS NULL OR TRIM(Condition)='')", (set_id,)).fetchone()[0]
+        disabled_block = conn.execute("SELECT COUNT(*) FROM policies WHERE set_id=? AND Type='Rule' AND Enabled='false' AND LOWER(Actions) LIKE '%block%'", (set_id,)).fetchone()[0]
+    return {
+        "total": total, "rules": rules, "groups": groups,
+        "enabled": enabled, "disabled": disabled,
+        "block": block, "unconditional": unconditional, "disabled_block": disabled_block,
+    }

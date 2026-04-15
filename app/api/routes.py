@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 from typing import Dict, Any, List
 from app.services.parser_service import ParserService
-from app.core.database import save_parsed_data, get_dict_results, delete_policy_set, clear_all_history, compare_policy_sets
+from app.core.database import save_parsed_data, get_dict_results, delete_policy_set, clear_all_history, compare_policy_sets, get_policy_stats
 import os
 import traceback
 import logging
@@ -136,3 +136,10 @@ async def get_objects(set_id: int):
 @router.get("/metadata/{set_id}")
 async def get_metadata(set_id: int):
     return get_dict_results("SELECT * FROM metadata WHERE set_id = ?", (set_id,))
+
+@router.get("/analysis/{set_id}/policy-stats")
+async def policy_stats_endpoint(set_id: int):
+    try:
+        return get_policy_stats(set_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

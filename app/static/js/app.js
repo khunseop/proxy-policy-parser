@@ -18,6 +18,7 @@ let statsData       = [];
 let statsSortedData = [];
 let statsSortCol    = 'policy_count';
 let statsSortDir    = 'desc';
+let policyStats     = null;
 
 // Diff 상태
 let diffData        = null;   // 마지막 diff 결과
@@ -98,6 +99,7 @@ async function handleSetChange() {
     currentPath   = '';
     selectedPk    = null;
     statsData     = [];
+    policyStats   = null;
     closeDetail();
     clearSearchInput();
 
@@ -1220,16 +1222,60 @@ async function loadStatsData() {
     }
     body.innerHTML = '<div class="loading">통계 분석 중...</div>';
     try {
-        const res  = await fetch(`/api/v1/analysis/${currentSetId}/top-hosts?limit=200`);
-        statsData  = await res.json();
-        renderStatsTable();
+        const [hostRes, policyStatsRes] = await Promise.all([
+            fetch(`/api/v1/analysis/${currentSetId}/top-hosts?limit=200`),
+            fetch(`/api/v1/analysis/${currentSetId}/policy-stats`)
+        ]);
+        statsData   = await hostRes.json();
+        policyStats = await policyStatsRes.json();
+        renderStatsPage();
     } catch (err) {
         body.innerHTML = `<div class="empty-state" style="color:red;">${escapeHtml(err.message)}</div>`;
     }
 }
 
-function renderStatsTable() {
+function renderStatsPage() {
     const body = document.getElementById('main-body');
+    body.innerHTML = `
+        <div class="policy-stats-section" id="policy-stats-cards"></div>
+        <div id="stats-table-container"></div>
+    `;
+    if (policyStats) {
+        document.getElementById('policy-stats-cards').innerHTML = renderPolicyStatsCards(policyStats);
+    }
+    renderStatsTable();
+}
+
+function renderPolicyStatsCards(s) {
+    const pct = (v, t) => t > 0 ? Math.round(v / t * 100) : 0;
+    const cards = [
+        { label: '전체 정책',   value: s.total,          sub: `Rule ${s.rules} · Group ${s.groups}`,             color: 'var(--primary)', icon: '📋' },
+        { label: '활성 정책',   value: s.enabled,         sub: `전체 Rule의 ${pct(s.enabled,  s.rules)}%`,         color: '#1a7a3d',        icon: '✅' },
+        { label: '비활성 정책', value: s.disabled,        sub: `전체 Rule의 ${pct(s.disabled, s.rules)}%`,         color: '#86868b',        icon: '⏸' },
+        { label: '차단 정책',   value: s.block,           sub: `전체 Rule의 ${pct(s.block,    s.rules)}%`,         color: '#c0392b',        icon: '🚫' },
+        { label: '무조건 실행', value: s.unconditional,   sub: '조건 없는 Rule',                                  color: '#d4680a',        icon: '⚡' },
+        { label: '비활성 차단', value: s.disabled_block,  sub: '꺼진 차단 정책',                                  color: '#8e44ad',        icon: '🔕' },
+    ];
+    return `
+        <div class="stats-section-header">
+            <span class="stats-title">📊 정책 통계</span>
+        </div>
+        <div class="policy-stats-grid">
+            ${cards.map(c => `
+                <div class="stat-card">
+                    <div class="stat-card-icon">${c.icon}</div>
+                    <div class="stat-card-body">
+                        <div class="stat-card-value" style="color:${c.color};">${c.value.toLocaleString()}</div>
+                        <div class="stat-card-label">${c.label}</div>
+                        <div class="stat-card-sub">${c.sub}</div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>`;
+}
+
+function renderStatsTable() {
+    const body = document.getElementById('stats-table-container') || document.getElementById('main-body');
     if (!statsData.length) {
         body.innerHTML = '<div class="empty-state">데이터가 없습니다.</div>';
         return;
