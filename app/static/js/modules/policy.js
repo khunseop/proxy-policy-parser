@@ -138,7 +138,7 @@ export async function loadAllPolicies() {
     body.innerHTML = '<div class="loading">로딩 중...</div>';
 
     try {
-        const nodes = await api.searchPolicies(state.currentSetId, '');
+        const nodes = await api.searchPolicies(state.currentSetId, { limit: 20000 });
 
         if (!nodes.length) {
             body.innerHTML = '<div class="empty-state">정책이 없습니다.</div>';
@@ -367,7 +367,7 @@ export function resetFilters() {
         const el = document.getElementById(id);
         if (el) el.selectedIndex = 0;
     });
-    document.querySelectorAll('.filter-bar select').forEach(s => s.classList.remove('filter-active'));
+    document.querySelectorAll('.toolbar-search-row select').forEach(s => s.classList.remove('filter-active'));
     document.getElementById('filter-reset-btn')?.classList.add('hidden');
     const query = document.getElementById('main-search')?.value.trim() || '';
     if (!query) clearSearch(); else performFilteredSearch(query);
@@ -410,7 +410,7 @@ export async function performFilteredSearch(query) {
             enabled: enabledFilter,
             exact: exact ? '1' : '0',
             fields: fieldsFilter,
-            limit: expiryFilter ? 5000 : 500,
+            limit: 20000,
         });
 
         // Client-side expiry filter (timeinrangeiso is embedded in Condition text)
@@ -425,7 +425,8 @@ export async function performFilteredSearch(query) {
         body.innerHTML = '';
         const header = document.createElement('div');
         header.className   = 'results-header';
-        header.textContent = `${parts.join(' · ')} — ${filtered.length}개 결과`;
+        const scopeNote = `전체 정책에서 검색`;
+        header.textContent = `${parts.join(' · ')} — ${filtered.length}개 결과 (${scopeNote})`;
         body.appendChild(header);
 
         if (!filtered.length) {

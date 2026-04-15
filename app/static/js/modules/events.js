@@ -246,7 +246,6 @@ export function showTab(tab) {
     
     if (tab === 'policies') {
         document.getElementById('main-toolbar').style.display = 'flex';
-        document.getElementById('filter-bar').classList.remove('hidden');
         if (!state.currentSetId) {
             document.getElementById('sidebar-body').innerHTML = '<div class="sidebar-placeholder">정책을 선택하세요.</div>';
             document.getElementById('main-body').innerHTML    = '<div class="empty-state">정책을 선택하거나 업로드하세요.</div>';
@@ -273,17 +272,14 @@ export function showTab(tab) {
     }
     else if (tab === 'lists') {
         document.getElementById('main-toolbar').style.display = 'none';
-        document.getElementById('filter-bar').classList.add('hidden');
         renderListsSidebar('');
     }
     else if (tab === 'stats') {
         document.getElementById('main-toolbar').style.display = 'none';
-        document.getElementById('filter-bar').classList.add('hidden');
         renderStatsSidebar();
         loadStatsData();
-    } 
+    }
     else if (tab === 'diff') {
-        document.getElementById('filter-bar').classList.add('hidden');
         showDiffTab();
     }
 }

@@ -49,41 +49,43 @@
         <!-- Main Panel -->
         <div class="main-panel" id="main-panel">
             <div class="main-toolbar" id="main-toolbar">
-                <div class="breadcrumb-wrap">
-                    <div class="breadcrumb" id="breadcrumb">
-                        <span class="crumb crumb-root" data-path="">Root</span>
-                    </div>
-                </div>
-                <div class="toolbar-right">
-                    <div class="search-wrap">
-                        <input type="text" id="main-search" placeholder="정책 검색...">
-                        <button class="search-clear hidden" id="search-clear">✕</button>
+                <!-- Row 1: 브레드크럼 + Export -->
+                <div class="toolbar-top">
+                    <div class="breadcrumb-wrap">
+                        <div class="breadcrumb" id="breadcrumb">
+                            <span class="crumb crumb-root" data-path="">Root</span>
+                        </div>
                     </div>
                     <button class="btn sm" id="export-btn" title="현재 목록 엑셀 내보내기" style="display:none;">⬇️ Excel</button>
                 </div>
-            </div>
-            <div class="filter-bar hidden" id="filter-bar">
-                <select id="filter-enabled" title="활성 여부">
-                    <option value="">전체 상태</option>
-                    <option value="true">활성만</option>
-                    <option value="false">비활성만</option>
-                </select>
-                <select id="filter-expiry" title="만료 상태">
-                    <option value="">만료: 전체</option>
-                    <option value="expired">만료됨</option>
-                    <option value="expiring">D-30 임박</option>
-                </select>
-                <select id="filter-fields" title="검색 대상">
-                    <option value="all">전체 필드</option>
-                    <option value="name">이름만</option>
-                    <option value="condition">조건만</option>
-                    <option value="actions">액션만</option>
-                </select>
-                <select id="filter-match" title="매칭 방식">
-                    <option value="contains">포함 매칭</option>
-                    <option value="exact">정확히 매칭</option>
-                </select>
-                <button class="filter-reset-btn hidden" id="filter-reset-btn">✕ 초기화</button>
+                <!-- Row 2: 검색 + 필터 (전체 정책 대상) -->
+                <div class="toolbar-search-row">
+                    <div class="search-wrap">
+                        <input type="text" id="main-search" placeholder="전체 정책 검색...">
+                        <button class="search-clear hidden" id="search-clear">✕</button>
+                    </div>
+                    <select id="filter-enabled" title="활성 여부">
+                        <option value="">전체 상태</option>
+                        <option value="true">활성만</option>
+                        <option value="false">비활성만</option>
+                    </select>
+                    <select id="filter-expiry" title="만료 상태">
+                        <option value="">만료: 전체</option>
+                        <option value="expired">만료됨</option>
+                        <option value="expiring">D-30 임박</option>
+                    </select>
+                    <select id="filter-fields" title="검색 대상">
+                        <option value="all">전체 필드</option>
+                        <option value="name">이름만</option>
+                        <option value="condition">조건만</option>
+                        <option value="actions">액션만</option>
+                    </select>
+                    <select id="filter-match" title="매칭 방식">
+                        <option value="contains">포함 매칭</option>
+                        <option value="exact">정확히 매칭</option>
+                    </select>
+                    <button class="filter-reset-btn hidden" id="filter-reset-btn">✕ 초기화</button>
+                </div>
             </div>
             <div class="main-body" id="main-body">
                 <div class="empty-state">정책을 선택하거나 업로드하세요.</div>

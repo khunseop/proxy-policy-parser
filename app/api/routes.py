@@ -90,7 +90,7 @@ async def search_policies(
 
     where = " AND ".join(conditions)
     sql   = f"SELECT * FROM policies WHERE {where} LIMIT ?"
-    params.append(min(limit, 5000))
+    params.append(limit)
     return get_dict_results(sql, params)
 
 @router.get("/analysis/{set_id}/value-lookup")
