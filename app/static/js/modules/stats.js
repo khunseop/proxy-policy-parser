@@ -9,7 +9,7 @@ export function renderStatsSidebar() {
     body.innerHTML = `
         <div class="stats-sidebar-wrap">
             <button class="btn sm" style="width:100%;" id="stats-refresh-btn">🔄 새로고침</button>
-            <button class="btn sm" style="width:100%;" id="stats-csv-btn">⬇️ CSV 내보내기</button>
+            <button class="btn sm" style="width:100%;" id="stats-csv-btn">⬇️ Excel 내보내기</button>
             <div class="section-label">값 조회</div>
             <div class="value-lookup-row">
                 <input type="text" id="value-search-input" placeholder="IP, 도메인...">

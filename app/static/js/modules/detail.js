@@ -70,13 +70,18 @@ export function openDetail(node) {
         <div id="object-inline-view"></div>
     `;
 
-    // 이벤트 위임을 사용하여 클릭 시 리스트 상세 정보 표시
-    const condFmt = document.getElementById('detail-cond-formatted');
-    if (condFmt) {
-        condFmt.querySelectorAll('.list-link').forEach(el => {
-            el.onclick = () => showObjectDetail(el.dataset.listId);
-        });
-    }
+    // DOM 반영 후 이벤트 리스너 바인딩 (짧은 지연시간 부여)
+    setTimeout(() => {
+        const condFmt = document.getElementById('detail-cond-formatted');
+        if (condFmt) {
+            condFmt.querySelectorAll('.list-link').forEach(el => {
+                el.onclick = (e) => {
+                    e.stopPropagation();
+                    showObjectDetail(el.dataset.listId);
+                };
+            });
+        }
+    }, 10);
 }
 
 export function closeDetail() {
@@ -92,15 +97,20 @@ export function formatCondition(cond) {
     if (cond === 'None')
         return '<span style="color:#aaa;font-style:italic;">조건 없음</span>';
 
+    // 1. 구문 강조 적용
     let s = colorCondition(cond);
 
-    s = s.replace(/List\(([^)]+)\)/g, (match, nameOrId) => {
+    // 2. List(...) 패턴을 링크로 변환 (공백 허용 보강)
+    // <span class="cond-fn">List</span> ( ... ) 형태 대응
+    const re = /(?:<span class="cond-fn">)?List(?:<\/span>)?\s*\(([^)]+)\)/g;
+    s = s.replace(re, (match, nameOrId) => {
         let listId = nameOrId;
-        let obj    = state.objectsMap[nameOrId];
+        let obj = state.objectsMap[nameOrId];
         if (!obj && state.objectsNameToId[nameOrId]) {
             listId = state.objectsNameToId[nameOrId];
             obj    = state.objectsMap[listId];
         }
+        
         const display = obj ? (obj.name || nameOrId) : nameOrId;
         return `<span class="list-link" data-list-id="${escapeHtml(listId)}" title="${escapeHtml(listId)}">${escapeHtml(display)}</span>`;
     });
@@ -127,6 +137,12 @@ export function showObjectDetail(listId) {
             </ul>
         </div>
     `;
-    document.getElementById('close-object-inline-btn').onclick = () => { wrap.innerHTML = ''; };
+    
+    document.getElementById('close-object-inline-btn').onclick = (e) => { 
+        e.stopPropagation();
+        wrap.innerHTML = ''; 
+    };
+    
+    // 부드럽게 스크롤
     wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
