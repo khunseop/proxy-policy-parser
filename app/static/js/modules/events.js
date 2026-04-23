@@ -14,7 +14,7 @@ import {
 } from './policy.js';
 import { renderListsSidebar, selectList } from './lists.js';
 import { renderStatsSidebar, loadStatsData } from './stats.js';
-import { openDiffModal, closeDiffModal, runDiff, showDiffTab } from './diff.js';
+import { closeDiffModal, runDiff, showDiffTab } from './diff.js';
 import { closeDetail, showObjectDetail } from './detail.js';
 
 export function bindEvents() {
@@ -29,9 +29,6 @@ export function bindEvents() {
 
     const clearHistoryBtn = document.getElementById('header-clear-btn');
     if (clearHistoryBtn) clearHistoryBtn.onclick = handleClearAllHistory;
-
-    const diffBtn = document.getElementById('diff-btn');
-    if (diffBtn) diffBtn.onclick = openDiffModal;
 
     const xmlUploadInput = document.getElementById('xml-upload');
     const xmlUploadBtn = document.getElementById('xml-upload-btn');
