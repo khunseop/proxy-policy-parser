@@ -1,10 +1,13 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi.responses import StreamingResponse
 from typing import Dict, Any, List
 from app.services.parser_service import ParserService
 from app.core.database import save_parsed_data, get_dict_results, delete_policy_set, clear_all_history, compare_policy_sets, get_policy_stats
+import io
 import os
 import traceback
 import logging
+import openpyxl
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +160,54 @@ async def diff_policy_sets(set_a: int = Query(...), set_b: int = Query(...)):
 @router.get("/objects/{set_id}")
 async def get_objects(set_id: int):
     return get_dict_results("SELECT * FROM objects WHERE set_id = ?", (set_id,))
+
+@router.get("/objects/{set_id}/export-all")
+async def export_all_lists_excel(set_id: int):
+    rows = get_dict_results(
+        """SELECT list_name, list_id, entry_value, entry_details, entry_type
+           FROM objects
+           WHERE set_id = ?
+           ORDER BY list_name, entry_value""",
+        (set_id,)
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="데이터가 없습니다.")
+
+    # 리스트별 집계
+    lists_seen = {}
+    for r in rows:
+        lid = r["list_id"]
+        if lid not in lists_seen:
+            lists_seen[lid] = {"name": r["list_name"] or lid, "count": 0}
+        lists_seen[lid]["count"] += 1
+
+    wb = openpyxl.Workbook()
+
+    ws1 = wb.active
+    ws1.title = "Lists"
+    ws1.append(["List Name", "List ID", "Entry Count"])
+    for lid, info in lists_seen.items():
+        ws1.append([info["name"], lid, info["count"]])
+
+    ws2 = wb.create_sheet("All Entries")
+    ws2.append(["List Name", "Value", "Description", "Type"])
+    for r in rows:
+        ws2.append([
+            r.get("list_name") or "",
+            r.get("entry_value") or "",
+            r.get("entry_details") or "",
+            r.get("entry_type") or "",
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="lists-{set_id}.xlsx"'}
+    )
 
 @router.get("/metadata/{set_id}")
 async def get_metadata(set_id: int):
