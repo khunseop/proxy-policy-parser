@@ -1,0 +1,17 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.enabled  { background: #d4edda; color: #1a7a3d; }
+.disabled { background: #e9e9eb; color: #6e6e73; }
+.group    { background: #e0eaff; color: #0050b3; }
+.rule     { background: #f0f0f5; color: #444; }
+.expired  { background: #fde8e8; color: #c0392b; }
+.expiring { background: #fff3cd; color: #7a5c00; }
+.neutral  { background: #f0f0f5; color: #555; }

@@ -1,0 +1,32 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+  height: var(--filter-h);
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+.search {
+  flex: 1;
+  min-width: 160px;
+  max-width: 300px;
+  height: 28px;
+}
+.bar select {
+  height: 28px;
+  flex-shrink: 0;
+}
+.count {
+  font-size: 11px;
+  color: var(--text-sec);
+  white-space: nowrap;
+  margin-left: auto;
+}
+.bar button {
+  flex-shrink: 0;
+  height: 28px;
+}

@@ -1,40 +1,38 @@
 import os
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import FileResponse
 from app.api import routes
-from app.core.config import settings
 from app.core.database import init_db
 
-# 앱 시작 시 DB 및 테이블 초기화 보장
 init_db()
 
 app = FastAPI(title="Skyhigh Policy Parser API")
 
-# API 라우터 연결
+# API 라우터 (먼저 등록해야 /api/* 가 SPA catch-all보다 우선)
 app.include_router(routes.router, prefix="/api/v1")
 
-# 현재 파일의 절대 경로를 기준으로 디렉토리 설정
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DIST_DIR = os.path.join(BASE_DIR, "app/static/dist")
+ASSETS_DIR = os.path.join(DIST_DIR, "assets")
+
+# React 빌드 결과물 서빙
+if os.path.isdir(ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
+
+# 기존 Vanilla JS (Phase 4 전까지 /static 경로로 유지)
 STATIC_DIR = os.path.join(BASE_DIR, "app/static")
-TEMPLATE_DIR = os.path.join(BASE_DIR, "app/templates")
-
-# 디렉토리 생성 보장
 os.makedirs(STATIC_DIR, exist_ok=True)
-os.makedirs(TEMPLATE_DIR, exist_ok=True)
-
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
-@app.get("/")
-async def read_root(request: Request):
-    """메인 웹 인터페이스 페이지"""
-    return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={}
-    )
+SPA_INDEX = os.path.join(DIST_DIR, "index.html")
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    if os.path.isfile(SPA_INDEX):
+        return FileResponse(SPA_INDEX)
+    return FileResponse(os.path.join(BASE_DIR, "app/templates/index.html"))
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

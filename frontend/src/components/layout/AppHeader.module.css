@@ -1,0 +1,36 @@
+.header {
+  height: var(--header-h);
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  flex-shrink: 0;
+  z-index: 100;
+}
+.logo {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  color: var(--primary);
+}
+.mid {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+.select {
+  min-width: 260px;
+  max-width: 400px;
+  height: 28px;
+  font-size: 12px;
+}
+.right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
