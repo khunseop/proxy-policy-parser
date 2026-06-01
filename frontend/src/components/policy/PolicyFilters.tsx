@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react'
 import styles from './PolicyFilters.module.css'
 
 export interface Filters {
@@ -17,15 +18,32 @@ interface Props {
 }
 
 export function PolicyFilters({ filters, onChange, onExport, total, visible }: Props) {
-  const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch })
+  const [localKeyword, setLocalKeyword] = useState(filters.keyword)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 키워드: 로컬에서 즉시 반영, 300ms 디바운스 후 부모에 전달
+  const handleKeyword = (value: string) => {
+    setLocalKeyword(value)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      onChange({ ...filters, keyword: value })
+    }, 300)
+  }
+
+  // 부모에서 keyword가 초기화되면 로컬도 초기화
+  useEffect(() => {
+    if (filters.keyword === '') setLocalKeyword('')
+  }, [filters.keyword])
+
+  const set = (patch: Partial<Omit<Filters, 'keyword'>>) => onChange({ ...filters, ...patch })
 
   return (
     <div className={styles.bar}>
       <input
         className={styles.search}
         placeholder="🔍 정책 검색..."
-        value={filters.keyword}
-        onChange={e => set({ keyword: e.target.value })}
+        value={localKeyword}
+        onChange={e => handleKeyword(e.target.value)}
       />
 
       <select value={filters.fields} onChange={e => set({ fields: e.target.value as Filters['fields'] })}>

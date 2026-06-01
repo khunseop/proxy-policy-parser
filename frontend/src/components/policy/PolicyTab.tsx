@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react'
-import { usePolicies } from '../../hooks/useQueries'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { searchPolicies } from '../../api/client'
 import { PolicyFilters, type Filters } from './PolicyFilters'
 import { PolicyTable } from './PolicyTable'
 import { PolicyDetail } from './PolicyDetail'
@@ -19,7 +20,31 @@ export function PolicyTab({ setId }: { setId: number }) {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS)
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
-  const { data: allPolicies = [], isLoading } = usePolicies(setId, { limit: 20000 })
+
+  const hasKeyword = filters.keyword.trim().length > 0
+
+  // 키워드 없을 때: 기본 전체 로드 (limit 3000, 캐시됨)
+  const { data: basePolicies = [], isLoading: baseLoading } = useQuery({
+    queryKey: ['policies-base', setId],
+    queryFn: () => searchPolicies(setId, { limit: 3000 }),
+    enabled: !!setId,
+    staleTime: Infinity,
+  })
+
+  // 키워드 있을 때: 서버 검색 (디바운스된 keyword 기준)
+  const { data: searchResult = [], isFetching: searching } = useQuery({
+    queryKey: ['policies-search', setId, filters.keyword, filters.fields],
+    queryFn: () => searchPolicies(setId, {
+      query: filters.keyword,
+      fields: filters.fields,
+      limit: 2000,
+    }),
+    enabled: !!setId && hasKeyword,
+    staleTime: 30000,
+  })
+
+  const sourcePolicies = hasKeyword ? searchResult : basePolicies
+  const isLoading = baseLoading && !hasKeyword
 
   const handleToggleGroup = (path: string) => {
     setCollapsedGroups(prev => {
@@ -38,22 +63,6 @@ export function PolicyTab({ setId }: { setId: number }) {
     document.body.removeChild(a)
   }
 
-  const filteredCount = useMemo(() => {
-    const kw = filters.keyword.toLowerCase()
-    return allPolicies.filter(p => {
-      if (filters.type !== 'all' && p.Type !== filters.type) return false
-      if (filters.enabled !== 'all' && p.Enabled !== filters.enabled) return false
-      if (kw) {
-        const targets: string[] = []
-        if (filters.fields === 'all' || filters.fields === 'name')      targets.push(p.Name || '')
-        if (filters.fields === 'all' || filters.fields === 'condition') targets.push(p.Condition || '')
-        if (filters.fields === 'all' || filters.fields === 'actions')   targets.push(p.Actions || '')
-        if (!targets.some(t => t.toLowerCase().includes(kw))) return false
-      }
-      return true
-    }).length
-  }, [allPolicies, filters])
-
   if (isLoading) return <EmptyState message="정책 로딩 중..." />
 
   return (
@@ -62,13 +71,17 @@ export function PolicyTab({ setId }: { setId: number }) {
         filters={filters}
         onChange={setFilters}
         onExport={handleExport}
-        total={allPolicies.length}
-        visible={filteredCount}
+        total={basePolicies.length}
+        visible={sourcePolicies.length}
       />
+
+      {searching && (
+        <div className={styles.searchingBar}>🔍 검색 중...</div>
+      )}
 
       <div className={styles.tableArea}>
         <PolicyTable
-          policies={allPolicies}
+          policies={sourcePolicies}
           filters={filters}
           onSelect={setSelectedPolicy}
           selectedPk={selectedPolicy?._pk_auto ?? null}

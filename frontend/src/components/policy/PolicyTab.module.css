@@ -4,6 +4,14 @@
   flex: 1;
   overflow: hidden;
 }
+.searchingBar {
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--primary);
+  background: #f0f7ff;
+  border-bottom: 1px solid #c5d8f7;
+  flex-shrink: 0;
+}
 .tableArea {
   flex: 1;
   overflow: hidden;

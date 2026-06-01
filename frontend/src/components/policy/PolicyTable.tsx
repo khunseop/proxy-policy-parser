@@ -35,26 +35,18 @@ function getDepth(path: string) {
 export function PolicyTable({ policies, filters, onSelect, selectedPk, collapsedGroups, onToggleGroup }: Props) {
   const parentRef = useRef<HTMLDivElement>(null)
 
+  // 키워드 검색은 서버에서 처리됨 — 클라이언트는 type/enabled/expiry만 필터
   const filtered = useMemo(() => {
-    const kw = filters.keyword.toLowerCase()
+    const needsFilter = filters.type !== 'all' || filters.enabled !== 'all' || filters.expiry !== 'all'
+    if (!needsFilter) return policies
     return policies.filter(p => {
       if (filters.type !== 'all' && p.Type !== filters.type) return false
       if (filters.enabled !== 'all' && p.Enabled !== filters.enabled) return false
-
       if (filters.expiry !== 'all') {
         const exp = detectExpiry(p.Condition || '')
-        if (filters.expiry === 'expired'  && !exp?.expired)       return false
-        if (filters.expiry === 'expiring' && !exp?.expiringSoon)  return false
+        if (filters.expiry === 'expired'  && !exp?.expired)      return false
+        if (filters.expiry === 'expiring' && !exp?.expiringSoon) return false
       }
-
-      if (kw) {
-        const targets: string[] = []
-        if (filters.fields === 'all' || filters.fields === 'name')      targets.push(p.Name || '')
-        if (filters.fields === 'all' || filters.fields === 'condition') targets.push(p.Condition || '')
-        if (filters.fields === 'all' || filters.fields === 'actions')   targets.push(p.Actions || '')
-        if (!targets.some(t => t.toLowerCase().includes(kw))) return false
-      }
-
       return true
     })
   }, [policies, filters])
