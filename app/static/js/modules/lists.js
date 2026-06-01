@@ -14,12 +14,7 @@ export function renderListsSidebar(filterText = '') {
     }
 
     const isValue = state.listSearchMode === 'value';
-    const totalLists = Object.keys(state.objectsMap).length;
     body.innerHTML = `
-        <div class="list-export-bar">
-            <span class="list-export-label">전체 ${totalLists}개 리스트</span>
-            <button class="btn sm" id="list-export-all-btn">⬇️ 전체 Excel 저장</button>
-        </div>
         <div class="list-mode-tabs">
             <button class="lm-tab ${!isValue ? 'active' : ''}" id="list-mode-name-btn">📋 이름 검색</button>
             <button class="lm-tab ${isValue ? 'active' : ''}" id="list-mode-value-btn">🔍 값 검색</button>
@@ -33,14 +28,6 @@ export function renderListsSidebar(filterText = '') {
         <div id="list-names-panel"></div>
     `;
 
-    document.getElementById('list-export-all-btn').onclick = () => {
-        const a = document.createElement('a');
-        a.href = `/api/v1/objects/${state.currentSetId}/export-all`;
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-    };
     document.getElementById('list-mode-name-btn').onclick = () => setListSearchMode('name');
     document.getElementById('list-mode-value-btn').onclick = () => setListSearchMode('value');
     document.getElementById('list-search-input').oninput = (e) => handleListSearch(e.target.value);

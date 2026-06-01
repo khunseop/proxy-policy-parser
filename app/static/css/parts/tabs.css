@@ -1,17 +1,4 @@
 /* ── Lists Tab ── */
-.list-export-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 8px;
-    border-bottom: 1px solid var(--border);
-    background: #f5f5f7;
-    flex-shrink: 0;
-}
-.list-export-label {
-    font-size: 11px;
-    color: var(--text-sec);
-}
 .list-mode-tabs {
     display: flex;
     border-bottom: 1px solid var(--border);

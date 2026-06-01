@@ -9,7 +9,10 @@ export function renderStatsSidebar() {
     body.innerHTML = `
         <div class="stats-sidebar-wrap">
             <button class="btn sm" style="width:100%;" id="stats-refresh-btn">🔄 새로고침</button>
-            <button class="btn sm" style="width:100%;" id="stats-csv-btn">⬇️ Excel 내보내기</button>
+            <div class="section-label">정책 추출</div>
+            <button class="btn sm" style="width:100%;" id="stats-csv-btn">⬇️ 정책 Excel 내보내기</button>
+            <div class="section-label">리스트 추출</div>
+            <button class="btn sm" style="width:100%;" id="lists-export-all-btn">⬇️ 전체 리스트 Excel 저장</button>
             <div class="section-label">값 조회</div>
             <div class="value-lookup-row">
                 <input type="text" id="value-search-input" placeholder="IP, 도메인...">
@@ -23,6 +26,15 @@ export function renderStatsSidebar() {
 
     document.getElementById('stats-refresh-btn').onclick = loadStatsData;
     document.getElementById('stats-csv-btn').onclick = exportStatsCSV;
+    document.getElementById('lists-export-all-btn').onclick = () => {
+        if (!state.currentSetId) { alert('정책을 먼저 선택하세요.'); return; }
+        const a = document.createElement('a');
+        a.href = `/api/v1/objects/${state.currentSetId}/export-all`;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
     document.getElementById('value-lookup-btn').onclick = doValueSearch;
     document.getElementById('value-search-input').onkeydown = (e) => { if(e.key==='Enter') doValueSearch(); };
 }
