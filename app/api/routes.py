@@ -214,52 +214,85 @@ async def export_all_lists_excel(set_id: int):
     )
 
 def _batch_lookup_core(set_id: int, values: list[str]):
-    """배치 값 조회 공통 로직. (조회 + export 양쪽에서 사용)"""
+    """배치 값 조회 공통 로직.
+
+    두 경로로 정책을 수집:
+    A) 리스트 엔트리 정확 일치 → list_id → policy_object_mapping → policies
+    B) policies.Condition에 값이 직접 포함 (Python LIKE, 서버사이드)
+    """
     if not values:
-        return None, [], [], []
+        return {}, [], [], {}
 
+    values_lower = [v.lower() for v in values]
+
+    # ── A. 리스트 엔트리 정확 일치 ─────────────────────────────────────────
     placeholders = ",".join("?" * len(values))
-
-    # 1. 값 → list_id / list_name 매핑
     obj_rows = get_dict_results(
         f"SELECT list_id, list_name, entry_value FROM objects "
         f"WHERE set_id = ? AND entry_value IN ({placeholders})",
         [set_id] + values
     )
 
-    # matched_map: {value -> [(list_id, list_name), ...]}
-    matched_map: dict = {}
+    matched_map: dict = {}   # {value -> [(list_id, list_name)]}
     found_list_ids: set = set()
     for r in obj_rows:
         v = r["entry_value"]
         matched_map.setdefault(v, []).append((r["list_id"], r["list_name"] or r["list_id"]))
         found_list_ids.add(r["list_id"])
 
-    unmatched = [v for v in values if v not in matched_map]
-
-    if not found_list_ids:
-        return matched_map, unmatched, [], []
-
-    # 2. list_ids → 정책 조회 (JOIN 1회)
-    lids = list(found_list_ids)
-    pl2 = ",".join("?" * len(lids))
-    policies = get_dict_results(
-        f"SELECT DISTINCT p.Name, p.Type, p.Path, p.Enabled, p.Condition, p.Actions, m.list_id "
-        f"FROM policies p "
-        f"JOIN policy_object_mapping m "
-        f"  ON p.set_id = m.set_id AND CAST(p._pk_auto AS TEXT) = m.policy_id "
-        f"WHERE m.set_id = ? AND m.list_id IN ({pl2}) "
-        f"ORDER BY p.Path",
-        [set_id] + lids
-    )
-
-    # list_id → list_name 역매핑
     lid_to_name: dict = {}
     for entries in matched_map.values():
         for lid, lname in entries:
             lid_to_name[lid] = lname
 
-    return matched_map, unmatched, policies, lid_to_name
+    list_policies: list = []
+    list_policy_pks: set = set()
+    if found_list_ids:
+        lids = list(found_list_ids)
+        pl2 = ",".join("?" * len(lids))
+        list_policies = get_dict_results(
+            f"SELECT DISTINCT p._pk_auto, p.Name, p.Type, p.Path, p.Enabled, "
+            f"p.Condition, p.Actions, m.list_id "
+            f"FROM policies p "
+            f"JOIN policy_object_mapping m "
+            f"  ON p.set_id = m.set_id AND CAST(p._pk_auto AS TEXT) = m.policy_id "
+            f"WHERE m.set_id = ? AND m.list_id IN ({pl2}) "
+            f"ORDER BY p.Path",
+            [set_id] + lids
+        )
+        list_policy_pks = {p["_pk_auto"] for p in list_policies}
+        for p in list_policies:
+            p["match_source"] = "list"
+            p["matched_value"] = ""
+
+    # ── B. Condition 직접 포함 검색 ────────────────────────────────────────
+    all_policies = get_dict_results(
+        "SELECT _pk_auto, Name, Type, Path, Enabled, Condition, Actions "
+        "FROM policies WHERE set_id = ? ORDER BY Path",
+        [set_id]
+    )
+
+    cond_policies: list = []
+    cond_matched_values: set = set()
+    for p in all_policies:
+        if p["_pk_auto"] in list_policy_pks:
+            continue  # 이미 리스트 경로로 수집됨
+        cond_lower = (p.get("Condition") or "").lower()
+        matched_v = next((v for v, vl in zip(values, values_lower) if vl in cond_lower), None)
+        if matched_v:
+            p["match_source"] = "condition"
+            p["matched_value"] = matched_v
+            p["list_id"] = ""
+            p["list_name"] = f"Condition 직접 포함"
+            cond_policies.append(p)
+            cond_matched_values.add(matched_v)
+
+    # ── 결과 합산 ──────────────────────────────────────────────────────────
+    all_matched_values = set(matched_map.keys()) | cond_matched_values
+    unmatched = [v for v in values if v not in all_matched_values]
+    combined_policies = list_policies + cond_policies
+
+    return matched_map, unmatched, combined_policies, lid_to_name
 
 
 @router.post("/analysis/{set_id}/value-lookup-batch")
@@ -270,17 +303,19 @@ async def value_lookup_batch(set_id: int, req: BatchLookupRequest):
 
     matched_map, unmatched, policies, lid_to_name = _batch_lookup_core(set_id, values)
 
-    # 응답용 직렬화
     matched_summary = {
         v: [{"list_id": lid, "list_name": lname} for lid, lname in entries]
         for v, entries in matched_map.items()
     }
     for p in policies:
-        p["list_name"] = lid_to_name.get(p.get("list_id"), p.get("list_id", ""))
+        if p.get("match_source") == "list":
+            p["list_name"] = lid_to_name.get(p.get("list_id", ""), p.get("list_id", ""))
+
+    all_matched_count = len(matched_map) + len({p["matched_value"] for p in policies if p.get("match_source") == "condition" and p.get("matched_value")})
 
     return {
         "total_input": len(values),
-        "matched_count": len(matched_map),
+        "matched_count": min(all_matched_count, len(values) - len(unmatched)),
         "unmatched_values": unmatched,
         "matched_values": matched_summary,
         "policies": policies,
@@ -298,21 +333,33 @@ async def value_lookup_batch_export(set_id: int, req: BatchLookupRequest):
 
     wb = openpyxl.Workbook()
 
+    # condition 경로로 매칭된 값 집합
+    cond_matched = {p["matched_value"] for p in policies if p.get("match_source") == "condition" and p.get("matched_value")}
+
     # Sheet 1: 매칭 결과 (입력값 기준)
     ws1 = wb.active
     ws1.title = "매칭 결과"
-    ws1.append(["입력값", "매칭 여부", "리스트 이름"])
+    ws1.append(["입력값", "매칭 여부", "매칭 경로", "리스트 이름"])
     for v in values:
         if v in matched_map:
             list_names = ", ".join(lname for _, lname in matched_map[v])
-            ws1.append([v, "매칭", list_names])
+            ws1.append([v, "매칭", "리스트 엔트리", list_names])
+        elif v in cond_matched:
+            ws1.append([v, "매칭", "Condition 직접 포함", ""])
         else:
-            ws1.append([v, "미매칭", ""])
+            ws1.append([v, "미매칭", "", ""])
 
     # Sheet 2: 정책 목록
     ws2 = wb.create_sheet("정책 목록")
-    ws2.append(["Policy Name", "Type", "Path", "Enabled", "Condition", "Actions", "Referenced List"])
+    ws2.append(["Policy Name", "Type", "Path", "Enabled", "Condition", "Actions", "매칭 경로", "관련 값/리스트"])
     for p in policies:
+        source = p.get("match_source", "")
+        if source == "list":
+            ref = lid_to_name.get(p.get("list_id", ""), "")
+            path_label = "리스트 엔트리"
+        else:
+            ref = p.get("matched_value", "")
+            path_label = "Condition 직접"
         ws2.append([
             p.get("Name") or "",
             p.get("Type") or "",
@@ -320,7 +367,8 @@ async def value_lookup_batch_export(set_id: int, req: BatchLookupRequest):
             "활성" if p.get("Enabled") == "true" else "비활성",
             p.get("Condition") or "",
             p.get("Actions") or "",
-            lid_to_name.get(p.get("list_id", ""), ""),
+            path_label,
+            ref,
         ])
 
     buf = io.BytesIO()

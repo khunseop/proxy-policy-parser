@@ -44,7 +44,7 @@ export function BatchLookup({ setId }: Props) {
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.hint}>값을 콤마(,)로 구분하여 붙여넣으세요. 최대 2000개 지원.</div>
+      <div className={styles.hint}>값을 콤마(,)로 구분하여 붙여넣으세요. 리스트 엔트리 정확 일치 + Condition 포함 검색을 함께 수행합니다.</div>
       <textarea
         className={styles.textarea}
         placeholder="google.com, 10.0.0.1, facebook.com, ..."
@@ -94,7 +94,10 @@ export function BatchLookup({ setId }: Props) {
             <>
               <div className={styles.policyBar}>정책 목록 — {result.policy_count}개</div>
               <div className={styles.policyList}>
-                {result.policies.map((p, i) => (
+                {result.policies.map((p, i) => {
+                const isCondMatch = (p as any).match_source === 'condition'
+                const matchedVal  = (p as any).matched_value as string | undefined
+                return (
                   <div key={i} className={styles.policyRow}>
                     <div className={styles.policyName}>
                       <Badge variant={p.Type === 'Group' ? 'group' : 'rule'}>{p.Type}</Badge>
@@ -102,7 +105,10 @@ export function BatchLookup({ setId }: Props) {
                         {p.Enabled === 'true' ? '활성' : '비활성'}
                       </Badge>
                       <span>{p.Name}</span>
-                      {p.list_name && <span className={styles.listTag}>📦 {p.list_name}</span>}
+                      {isCondMatch
+                        ? <span className={styles.condTag}>📝 Condition 직접 포함{matchedVal ? `: "${matchedVal}"` : ''}</span>
+                        : p.list_name && <span className={styles.listTag}>📦 {p.list_name}</span>
+                      }
                     </div>
                     <div className={styles.policyPath}>{p.Path}</div>
                     {p.Condition && (
@@ -111,7 +117,8 @@ export function BatchLookup({ setId }: Props) {
                       </div>
                     )}
                   </div>
-                ))}
+                )
+              })}
               </div>
             </>
           )}
