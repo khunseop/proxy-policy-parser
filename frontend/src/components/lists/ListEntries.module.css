@@ -1,0 +1,30 @@
+.wrap { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.header { padding: 10px 14px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.title { display: flex; flex-direction: column; gap: 2px; }
+.name { font-size: 13px; font-weight: 600; }
+.meta { font-size: 11px; color: var(--text-sec); }
+.searchRow { padding: 6px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.input { height: 28px; width: 100%; }
+.tableWrap { flex: 1; overflow-y: auto; min-height: 0; }
+.table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.table thead th {
+  position: sticky; top: 0; background: #f5f5f7;
+  padding: 5px 10px; text-align: left; font-size: 10px;
+  font-weight: 700; color: var(--text-sec); border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+}
+.table tbody td { padding: 5px 10px; border-bottom: 1px solid #f5f5f7; }
+.table tbody tr:hover { background: #f9f9fb; }
+.mono { font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace; }
+.desc { color: var(--text-sec); font-size: 11px; }
+.empty { text-align: center; padding: 16px; color: var(--text-sec); }
+.refsBar {
+  padding: 6px 12px 4px; font-size: 10px; font-weight: 700;
+  color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.04em;
+  background: #fafafa; border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.refs { overflow-y: auto; max-height: 180px; }
+.refItem { padding: 6px 12px; border-bottom: 1px solid #f5f5f7; cursor: pointer; }
+.refItem:hover { background: #f0f7ff; }
+.refName { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; }
+.refPath { font-size: 11px; color: var(--text-sec); margin-top: 1px; }

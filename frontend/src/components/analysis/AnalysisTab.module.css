@@ -1,0 +1,17 @@
+.tab { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.subTabs {
+  display: flex; gap: 4px; padding: 8px 12px 0;
+  border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0;
+}
+.subTab {
+  height: 30px; padding: 0 14px; border: 1px solid transparent;
+  border-bottom: none; border-radius: 6px 6px 0 0;
+  font-size: 12px; background: transparent; color: var(--text-sec); cursor: pointer;
+}
+.subTab:hover { background: var(--hover-bg); color: var(--text); }
+.subTab.active {
+  background: var(--surface); border-color: var(--border);
+  color: var(--primary); font-weight: 600;
+  position: relative; top: 1px; z-index: 1;
+}
+.content { flex: 1; overflow: auto; }

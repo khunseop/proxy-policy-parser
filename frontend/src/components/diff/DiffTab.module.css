@@ -1,0 +1,72 @@
+.tab { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.selectBar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0;
+}
+.select { height: 30px; flex: 1; max-width: 300px; }
+.arrow { color: var(--text-sec); flex-shrink: 0; }
+.error { font-size: 12px; color: var(--red); }
+
+.body { display: flex; flex: 1; overflow: hidden; }
+
+.sidePanel {
+  width: 200px; flex-shrink: 0; border-right: 1px solid var(--border);
+  overflow-y: auto; padding: 8px 0;
+}
+.diffMeta { padding: 4px 12px 10px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.diffFile { font-size: 11px; color: var(--text-sec); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sectionLabel {
+  font-size: 10px; font-weight: 700; color: var(--text-sec);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 8px 12px 4px;
+}
+.sectionBtn {
+  width: 100%; text-align: left; display: flex; align-items: center;
+  padding: 6px 12px; border: none; background: transparent; border-radius: 0;
+  cursor: pointer; font-size: 12px; gap: 6px;
+}
+.sectionBtn:hover { background: var(--hover-bg); }
+.sectionBtn.activeSection { background: var(--hover-bg); color: var(--primary); font-weight: 600; }
+.sectionName { flex: 1; }
+.sectionCount { font-size: 11px; font-weight: 700; }
+
+.mainPanel { flex: 1; overflow-y: auto; padding: 16px; }
+.cards { display: flex; flex-direction: column; gap: 8px; }
+
+.card {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 14px; background: var(--surface);
+}
+.card.added   { border-left: 4px solid #1a7a3d; background: #f6fffa; }
+.card.removed { border-left: 4px solid #c0392b; background: #fff6f6; }
+.card.changed { border-left: 4px solid #d4680a; background: #fffaf5; }
+
+.cardHeader { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; }
+.cardHeader del { color: #c0392b; text-decoration-color: #c0392b; }
+.cardHeader ins { color: #1a7a3d; text-decoration: none; }
+.cardSub { font-size: 11px; color: var(--text-sec); margin-top: 3px; }
+.cardCond {
+  font-size: 11px; margin-top: 6px;
+  font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace;
+  background: rgba(0,0,0,0.04); padding: 4px 8px; border-radius: 4px; color: #444;
+}
+
+.changeRow { margin-top: 6px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+.changeField {
+  font-size: 10px; font-weight: 700; color: var(--text-sec);
+  text-transform: uppercase; padding: 3px 8px; background: #f5f5f7;
+}
+.changeBefore {
+  font-size: 11px; padding: 4px 8px; background: #fff0f0;
+  font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace;
+  white-space: pre-wrap; word-break: break-all; color: #c0392b;
+}
+.changeAfter {
+  font-size: 11px; padding: 4px 8px; background: #f0fff4;
+  font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace;
+  white-space: pre-wrap; word-break: break-all; color: #1a7a3d;
+}
+
+.entryAdded  { font-size: 11px; color: #1a7a3d; padding: 1px 4px; font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace; }
+.entryRemoved { font-size: 11px; color: #c0392b; padding: 1px 4px; font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace; }
+.more { font-size: 11px; color: var(--text-sec); padding: 2px 4px; font-style: italic; }

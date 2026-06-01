@@ -1,0 +1,35 @@
+.tab { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+.searchBar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0; height: 44px;
+}
+.input { height: 28px; flex: 1; min-width: 0; max-width: 240px; }
+.count { font-size: 11px; color: var(--text-sec); white-space: nowrap; margin-left: auto; }
+.searchBar button { height: 28px; flex-shrink: 0; }
+
+.body { display: flex; flex: 1; overflow: hidden; }
+
+.listPanel {
+  width: 260px; flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.listItem {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 10px; cursor: pointer; font-size: 12px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  transition: background 0.08s;
+}
+.listItem:hover { background: var(--hover-bg); }
+.listItem.active { background: var(--sel-bg); color: white; }
+.listItem.active .listCount { background: rgba(255,255,255,0.25); }
+.listIcon { flex-shrink: 0; font-size: 13px; }
+.listName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.listCount {
+  font-size: 10px; background: rgba(0,0,0,0.08);
+  padding: 1px 5px; border-radius: 8px; flex-shrink: 0;
+}
+
+.entryPanel { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
