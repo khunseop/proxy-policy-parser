@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
 from typing import Dict, Any, List
+from pydantic import BaseModel
 from app.services.parser_service import ParserService
 from app.core.database import save_parsed_data, get_dict_results, delete_policy_set, clear_all_history, compare_policy_sets, get_policy_stats
 import io
@@ -8,6 +9,9 @@ import os
 import traceback
 import logging
 import openpyxl
+
+class BatchLookupRequest(BaseModel):
+    values: list[str]
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +212,127 @@ async def export_all_lists_excel(set_id: int):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="lists-{set_id}.xlsx"'}
     )
+
+def _batch_lookup_core(set_id: int, values: list[str]):
+    """배치 값 조회 공통 로직. (조회 + export 양쪽에서 사용)"""
+    if not values:
+        return None, [], [], []
+
+    placeholders = ",".join("?" * len(values))
+
+    # 1. 값 → list_id / list_name 매핑
+    obj_rows = get_dict_results(
+        f"SELECT list_id, list_name, entry_value FROM objects "
+        f"WHERE set_id = ? AND entry_value IN ({placeholders})",
+        [set_id] + values
+    )
+
+    # matched_map: {value -> [(list_id, list_name), ...]}
+    matched_map: dict = {}
+    found_list_ids: set = set()
+    for r in obj_rows:
+        v = r["entry_value"]
+        matched_map.setdefault(v, []).append((r["list_id"], r["list_name"] or r["list_id"]))
+        found_list_ids.add(r["list_id"])
+
+    unmatched = [v for v in values if v not in matched_map]
+
+    if not found_list_ids:
+        return matched_map, unmatched, [], []
+
+    # 2. list_ids → 정책 조회 (JOIN 1회)
+    lids = list(found_list_ids)
+    pl2 = ",".join("?" * len(lids))
+    policies = get_dict_results(
+        f"SELECT DISTINCT p.Name, p.Type, p.Path, p.Enabled, p.Condition, p.Actions, m.list_id "
+        f"FROM policies p "
+        f"JOIN policy_object_mapping m "
+        f"  ON p.set_id = m.set_id AND CAST(p._pk_auto AS TEXT) = m.policy_id "
+        f"WHERE m.set_id = ? AND m.list_id IN ({pl2}) "
+        f"ORDER BY p.Path",
+        [set_id] + lids
+    )
+
+    # list_id → list_name 역매핑
+    lid_to_name: dict = {}
+    for entries in matched_map.values():
+        for lid, lname in entries:
+            lid_to_name[lid] = lname
+
+    return matched_map, unmatched, policies, lid_to_name
+
+
+@router.post("/analysis/{set_id}/value-lookup-batch")
+async def value_lookup_batch(set_id: int, req: BatchLookupRequest):
+    values = [v.strip() for v in req.values if v.strip()]
+    if not values:
+        raise HTTPException(status_code=400, detail="값을 하나 이상 입력하세요.")
+
+    matched_map, unmatched, policies, lid_to_name = _batch_lookup_core(set_id, values)
+
+    # 응답용 직렬화
+    matched_summary = {
+        v: [{"list_id": lid, "list_name": lname} for lid, lname in entries]
+        for v, entries in matched_map.items()
+    }
+    for p in policies:
+        p["list_name"] = lid_to_name.get(p.get("list_id"), p.get("list_id", ""))
+
+    return {
+        "total_input": len(values),
+        "matched_count": len(matched_map),
+        "unmatched_values": unmatched,
+        "matched_values": matched_summary,
+        "policies": policies,
+        "policy_count": len(policies),
+    }
+
+
+@router.post("/analysis/{set_id}/value-lookup-batch/export")
+async def value_lookup_batch_export(set_id: int, req: BatchLookupRequest):
+    values = [v.strip() for v in req.values if v.strip()]
+    if not values:
+        raise HTTPException(status_code=400, detail="값을 하나 이상 입력하세요.")
+
+    matched_map, unmatched, policies, lid_to_name = _batch_lookup_core(set_id, values)
+
+    wb = openpyxl.Workbook()
+
+    # Sheet 1: 매칭 결과 (입력값 기준)
+    ws1 = wb.active
+    ws1.title = "매칭 결과"
+    ws1.append(["입력값", "매칭 여부", "리스트 이름"])
+    for v in values:
+        if v in matched_map:
+            list_names = ", ".join(lname for _, lname in matched_map[v])
+            ws1.append([v, "매칭", list_names])
+        else:
+            ws1.append([v, "미매칭", ""])
+
+    # Sheet 2: 정책 목록
+    ws2 = wb.create_sheet("정책 목록")
+    ws2.append(["Policy Name", "Type", "Path", "Enabled", "Condition", "Actions", "Referenced List"])
+    for p in policies:
+        ws2.append([
+            p.get("Name") or "",
+            p.get("Type") or "",
+            p.get("Path") or "",
+            "활성" if p.get("Enabled") == "true" else "비활성",
+            p.get("Condition") or "",
+            p.get("Actions") or "",
+            lid_to_name.get(p.get("list_id", ""), ""),
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="batch-lookup-{set_id}.xlsx"'}
+    )
+
 
 @router.get("/metadata/{set_id}")
 async def get_metadata(set_id: int):

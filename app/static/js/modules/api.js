@@ -68,5 +68,39 @@ export const api = {
     async fetchPolicyStats(setId) {
         const res = await fetch(`/api/v1/analysis/${setId}/policy-stats`);
         return await res.json();
+    },
+
+    async valueLookupBatch(setId, values) {
+        const res = await fetch(`/api/v1/analysis/${setId}/value-lookup-batch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values })
+        });
+        if (!res.ok) {
+            const e = await res.json();
+            throw new Error(e.detail || res.statusText);
+        }
+        return res.json();
+    },
+
+    async downloadValueLookupBatch(setId, values) {
+        const res = await fetch(`/api/v1/analysis/${setId}/value-lookup-batch/export`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values })
+        });
+        if (!res.ok) {
+            const e = await res.json();
+            throw new Error(e.detail || res.statusText);
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `batch-lookup-${setId}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 };
