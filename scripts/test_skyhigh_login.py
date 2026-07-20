@@ -1,7 +1,8 @@
 """Skyhigh SWG API 로그인 테스트.
 
-아래 값을 직접 채운 뒤 실행한다: python scripts/test_skyhigh_login.py
+실행하면 접속 정보를 터미널에서 입력받는다: python scripts/test_skyhigh_login.py
 """
+import getpass
 import logging
 import os
 import sys
@@ -12,16 +13,13 @@ from app.core.skyhigh_client import SkyhighSWGClient
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-BASE_URL = 'https://swg.example.com:port'
-USERNAME = 'admin'
-PASSWORD = 'secret'
-
 
 def main():
-    client = SkyhighSWGClient(BASE_URL, USERNAME, PASSWORD)
-    # 사내 프록시(SWG)가 관리 API 인증서를 신뢰하지 못해 차단하는 걸 피하기 위해
-    # 시스템/환경변수 프록시 설정을 무시하고 직접 접속한다.
-    client.session.trust_env = False
+    base_url = input('Base URL: ').strip()
+    username = input('Username: ').strip()
+    password = getpass.getpass('Password: ')
+
+    client = SkyhighSWGClient(base_url, username, password)
     try:
         client.login()
         print(f"로그인 성공. session_id={client.session_id}")
