@@ -15,7 +15,8 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
 def main():
-    base_url = input('Base URL: ').strip()
+    host = input('Host (예: IP:Port): ').strip()
+    base_url = f'https://{host}/Konfigurator/REST'
     username = input('Username: ').strip()
     password = getpass.getpass('Password: ')
 
