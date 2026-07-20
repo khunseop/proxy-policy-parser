@@ -1,5 +1,4 @@
 import requests
-from requests.auth import HTTPBasicAuth
 from urllib.parse import urljoin
 import xml.etree.ElementTree as ET
 import logging
@@ -19,18 +18,26 @@ class SkyhighSWGClient:
         self.password = password
         self.verify_ssl = verify_ssl
         self.session = requests.Session()
+        self.session.trust_env = False  # 사내 프록시 우회 (curl --noproxy "*" 와 동일)
         self.session_id = None
 
     def login(self):
         login_url = urljoin(self.base_url + '/', 'login')
         try:
-            response = self.session.post(login_url, auth=HTTPBasicAuth(self.username, self.password), verify=self.verify_ssl)
+            response = self.session.post(
+                login_url,
+                params={'userName': self.username, 'pass': self.password},
+                verify=self.verify_ssl,
+            )
             if response.status_code == 200:
-                if 'Set-Cookie' in response.headers:
-                    for cookie in response.headers['Set-Cookie'].split(';'):
-                        if cookie.strip().startswith('JSESSIONID='):
-                            self.session_id = cookie.strip().split('=')[1]
+                try:
+                    root = ET.fromstring(response.text)
+                    for elem in root.iter():
+                        if elem.tag.split('}')[-1] == 'content' and elem.text:
+                            self.session_id = elem.text.strip()
                             break
+                except ET.ParseError as e:
+                    raise Exception(f"로그인 응답 파싱 실패: {e}")
                 if self.session_id:
                     logger.info("로그인 성공")
                 else:
