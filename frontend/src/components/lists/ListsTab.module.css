@@ -31,5 +31,10 @@
   font-size: 10px; background: rgba(0,0,0,0.08);
   padding: 1px 5px; border-radius: 8px; flex-shrink: 0;
 }
+.listCount.hasMatches {
+  background: rgba(0, 113, 227, 0.12);
+  color: var(--primary);
+  font-weight: 600;
+}
 
 .entryPanel { flex: 1; overflow: hidden; display: flex; flex-direction: column; }

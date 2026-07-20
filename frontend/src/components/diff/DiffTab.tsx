@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchHistory, fetchDiff } from '../../api/client'
 import type { DiffResult, DiffChangedPolicy, DiffChangedList } from '../../api/types'
@@ -16,10 +16,11 @@ export function DiffTab({ setId: _setId }: { setId: number }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [section, setSection] = useState<Section | null>(null)
+  const [diffSearch, setDiffSearch] = useState('')
 
   const runDiff = async () => {
     if (!setA || !setB || setA === setB) { setError('서로 다른 파일을 선택해주세요.'); return }
-    setLoading(true); setError(''); setDiff(null); setSection(null)
+    setLoading(true); setError(''); setDiff(null); setSection(null); setDiffSearch('')
     try {
       const result = await fetchDiff(Number(setA), Number(setB))
       setDiff(result)
@@ -110,7 +111,28 @@ export function DiffTab({ setId: _setId }: { setId: number }) {
             {!section ? (
               <EmptyState message="왼쪽에서 항목을 선택하세요." />
             ) : (
-              <DiffContent diff={diff} section={section} />
+              <>
+                <div className={styles.filterBar}>
+                  <input
+                    type="text"
+                    placeholder="🔍 결과 내 검색 (이름, 경로 등)..."
+                    value={diffSearch}
+                    onChange={e => setDiffSearch(e.target.value)}
+                    className={styles.searchInput}
+                  />
+                  {diffSearch && (
+                    <button 
+                      className={styles.clearBtn} 
+                      onClick={() => setDiffSearch('')}
+                    >
+                      초기화
+                    </button>
+                  )}
+                </div>
+                <div className={styles.contentWrap}>
+                  <DiffContent diff={diff} section={section} search={diffSearch} />
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -119,22 +141,32 @@ export function DiffTab({ setId: _setId }: { setId: number }) {
   )
 }
 
-function DiffContent({ diff, section }: { diff: DiffResult; section: Section }) {
+function DiffContent({ diff, section, search }: { diff: DiffResult; section: Section; search: string }) {
   switch (section) {
-    case 'pol_added':   return <PolicyCards items={diff.policies.added}   variant="added"   title="추가된 정책" />
-    case 'pol_removed': return <PolicyCards items={diff.policies.removed} variant="removed" title="삭제된 정책" />
-    case 'pol_changed': return <PolicyChangedCards items={diff.policies.changed} />
-    case 'lst_added':   return <ListCards items={diff.lists.added}   variant="added"   title="추가된 리스트" />
-    case 'lst_removed': return <ListCards items={diff.lists.removed} variant="removed" title="삭제된 리스트" />
-    case 'lst_changed': return <ListChangedCards items={diff.lists.changed} />
+    case 'pol_added':   return <PolicyCards items={diff.policies.added}   variant="added"   title="추가된 정책" search={search} />
+    case 'pol_removed': return <PolicyCards items={diff.policies.removed} variant="removed" title="삭제된 정책" search={search} />
+    case 'pol_changed': return <PolicyChangedCards items={diff.policies.changed} search={search} />
+    case 'lst_added':   return <ListCards items={diff.lists.added}   variant="added"   title="추가된 리스트" search={search} />
+    case 'lst_removed': return <ListCards items={diff.lists.removed} variant="removed" title="삭제된 리스트" search={search} />
+    case 'lst_changed': return <ListChangedCards items={diff.lists.changed} search={search} />
   }
 }
 
-function PolicyCards({ items, variant, title }: { items: DiffResult['policies']['added']; variant: string; title: string }) {
-  if (!items.length) return <EmptyState message={`${title}이 없습니다.`} />
+function PolicyCards({ items, variant, title, search }: { items: DiffResult['policies']['added']; variant: string; title: string; search: string }) {
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return items
+    return items.filter(p => 
+      (p.Name || '').toLowerCase().includes(q) ||
+      (p.Path || '').toLowerCase().includes(q) ||
+      (p.Condition || '').toLowerCase().includes(q)
+    )
+  }, [items, search])
+
+  if (!filtered.length) return <EmptyState message={search ? "검색 결과가 없습니다." : `${title}이 없습니다.`} />
   return (
     <div className={styles.cards}>
-      {items.map((p, i) => (
+      {filtered.map((p, i) => (
         <div key={i} className={`${styles.card} ${styles[variant]}`}>
           <div className={styles.cardHeader}>
             <Badge variant={p.Type === 'Group' ? 'group' : 'rule'}>{p.Type}</Badge>
@@ -149,11 +181,30 @@ function PolicyCards({ items, variant, title }: { items: DiffResult['policies'][
   )
 }
 
-function PolicyChangedCards({ items }: { items: DiffChangedPolicy[] }) {
-  if (!items.length) return <EmptyState message="변경된 정책이 없습니다." />
+function PolicyChangedCards({ items, search }: { items: DiffChangedPolicy[]; search: string }) {
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return items
+    return items.filter(item => {
+      const nameA = item.a?.Name || ''
+      const nameB = item.b?.Name || ''
+      const pathA = item.a?.Path || ''
+      const pathB = item.b?.Path || ''
+      const condA = item.a?.Condition || ''
+      const condB = item.b?.Condition || ''
+      return nameA.toLowerCase().includes(q) || 
+             nameB.toLowerCase().includes(q) || 
+             pathA.toLowerCase().includes(q) || 
+             pathB.toLowerCase().includes(q) ||
+             condA.toLowerCase().includes(q) ||
+             condB.toLowerCase().includes(q)
+    })
+  }, [items, search])
+
+  if (!filtered.length) return <EmptyState message={search ? "검색 결과가 없습니다." : "변경된 정책이 없습니다."} />
   return (
     <div className={styles.cards}>
-      {items.map((item, i) => (
+      {filtered.map((item, i) => (
         <div key={i} className={`${styles.card} ${styles.changed}`}>
           <div className={styles.cardHeader}>
             <Badge variant="neutral">{item.a?.Type ?? 'Rule'}</Badge>
@@ -176,11 +227,20 @@ function PolicyChangedCards({ items }: { items: DiffChangedPolicy[] }) {
   )
 }
 
-function ListCards({ items, variant, title }: { items: DiffResult['lists']['added']; variant: string; title: string }) {
-  if (!items.length) return <EmptyState message={`${title}이 없습니다.`} />
+function ListCards({ items, variant, title, search }: { items: DiffResult['lists']['added']; variant: string; title: string; search: string }) {
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return items
+    return items.filter(l => 
+      (l.list_name || '').toLowerCase().includes(q) || 
+      (l.list_id || '').toLowerCase().includes(q)
+    )
+  }, [items, search])
+
+  if (!filtered.length) return <EmptyState message={search ? "검색 결과가 없습니다." : `${title}이 없습니다.`} />
   return (
     <div className={styles.cards}>
-      {items.map((l, i) => (
+      {filtered.map((l, i) => (
         <div key={i} className={`${styles.card} ${styles[variant]}`}>
           <div className={styles.cardHeader}>📦 {l.list_name}</div>
           <div className={styles.cardSub}>{l.list_id}</div>
@@ -191,11 +251,20 @@ function ListCards({ items, variant, title }: { items: DiffResult['lists']['adde
 }
 
 const PREVIEW = 20
-function ListChangedCards({ items }: { items: DiffChangedList[] }) {
-  if (!items.length) return <EmptyState message="변경된 리스트가 없습니다." />
+function ListChangedCards({ items, search }: { items: DiffChangedList[]; search: string }) {
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return items
+    return items.filter(l => 
+      (l.list_name || '').toLowerCase().includes(q) || 
+      (l.list_id || '').toLowerCase().includes(q)
+    )
+  }, [items, search])
+
+  if (!filtered.length) return <EmptyState message={search ? "검색 결과가 없습니다." : "변경된 리스트가 없습니다."} />
   return (
     <div className={styles.cards}>
-      {items.map((l, i) => (
+      {filtered.map((l, i) => (
         <div key={i} className={`${styles.card} ${styles.changed}`}>
           <div className={styles.cardHeader}>📦 {l.list_name}</div>
           <div className={styles.cardSub}>{l.list_id} · A: {l.entry_count_a}개 → B: {l.entry_count_b}개</div>

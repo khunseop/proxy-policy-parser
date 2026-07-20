@@ -1,0 +1,5 @@
+# Gemini UI/UX Improvement Todo List
+
+- [x] Lists 탭 UX 개선 (동적 매칭 카운트 및 자동 포커싱) [완료]
+- [x] Policy 탭 UX 개선 (Condition 포맷터, 복사 기능, 데이터 제한 안내 배너) [완료]
+- [x] Diff 탭 UX 개선 (결과 내 검색 필터) [완료]

@@ -65,6 +65,8 @@ export function PolicyTab({ setId }: { setId: number }) {
 
   if (isLoading) return <EmptyState message="정책 로딩 중..." />
 
+  const isLimitReached = basePolicies.length === 3000 && !hasKeyword
+
   return (
     <div className={styles.tab}>
       <PolicyFilters
@@ -74,6 +76,12 @@ export function PolicyTab({ setId }: { setId: number }) {
         total={basePolicies.length}
         visible={sourcePolicies.length}
       />
+
+      {isLimitReached && (
+        <div className={styles.limitBanner}>
+          ⚠️ 전체 정책 중 상위 3,000개만 표시 중입니다. 찾고자 하는 정책이 없다면 검색 기능을 이용해 주세요.
+        </div>
+      )}
 
       {searching && (
         <div className={styles.searchingBar}>🔍 검색 중...</div>

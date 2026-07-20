@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useObjects } from '../../hooks/useQueries'
 import { downloadAllListsExcel } from '../../api/client'
 import type { ListSummary } from '../../api/types'
@@ -45,7 +45,27 @@ export function ListsTab({ setId }: { setId: number }) {
     })
   }, [summaries, keyword, valueSearch])
 
+  // 자동 포커싱: 필터링 결과가 바뀌었고, 현재 선택된 ID가 필터링 결과에 없다면 첫 번째 항목을 자동 선택
+  useEffect(() => {
+    if (filtered.length > 0) {
+      const exists = filtered.some(s => s.list_id === selectedId)
+      if (!exists) {
+        setSelectedId(filtered[0].list_id)
+      }
+    } else {
+      setSelectedId(null)
+    }
+  }, [filtered, selectedId])
+
   const selected = useMemo(() => summaries.find(s => s.list_id === selectedId) ?? null, [summaries, selectedId])
+
+  // 각 리스트별 검색 조건에 맞는 매칭 엔트리 개수 계산
+  const getMatchDisplay = (s: ListSummary) => {
+    if (!valueSearch.trim()) return s.entry_count.toLocaleString()
+    const vs = valueSearch.toLowerCase()
+    const matchCount = s.entries.filter(e => (e.value || '').toLowerCase().includes(vs)).length
+    return `${matchCount} / ${s.entry_count}`
+  };
 
   if (isLoading) return <EmptyState message="리스트 로딩 중..." />
 
@@ -84,7 +104,9 @@ export function ListsTab({ setId }: { setId: number }) {
               >
                 <span className={styles.listIcon}>📦</span>
                 <span className={styles.listName}>{s.list_name}</span>
-                <span className={styles.listCount}>{s.entry_count.toLocaleString()}</span>
+                <span className={`${styles.listCount} ${valueSearch.trim() ? styles.hasMatches : ''}`}>
+                  {getMatchDisplay(s)}
+                </span>
               </div>
             ))
           )}

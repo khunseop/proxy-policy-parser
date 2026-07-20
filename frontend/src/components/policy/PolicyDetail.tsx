@@ -1,6 +1,51 @@
+import { useState, useMemo } from 'react'
 import type { Policy } from '../../api/types'
 import { Badge } from '../common/Badge'
 import styles from './PolicyDetail.module.css'
+
+function formatCondition(cond: string): string {
+  if (!cond) return ""
+  
+  const tokens = cond.split(/(\(|\)|(?:\s+AND\s+)|(?:\s+OR\s+))/i)
+  let indent = 0
+  const getIndentStr = (n: number) => "  ".repeat(n)
+  
+  let result = ""
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i].trim()
+    if (!token) continue
+    
+    if (token === "(") {
+      if (result && !result.endsWith("\n")) {
+        result += "\n"
+      }
+      result += getIndentStr(indent) + "(\n"
+      indent++
+    } else if (token === ")") {
+      indent = Math.max(0, indent - 1)
+      if (!result.endsWith("\n")) {
+        result += "\n"
+      }
+      result += getIndentStr(indent) + ")"
+    } else if (token.toUpperCase() === "AND" || token.toUpperCase() === "OR") {
+      if (!result.endsWith("\n")) {
+        result += "\n"
+      }
+      result += getIndentStr(indent) + token.toUpperCase() + " "
+    } else {
+      if (result.endsWith(" ")) {
+        result += token
+      } else {
+        if (result && !result.endsWith("\n")) {
+          result += "\n"
+        }
+        result += getIndentStr(indent) + token
+      }
+    }
+  }
+  
+  return result.trim()
+}
 
 interface Props {
   policy: Policy | null
@@ -17,10 +62,26 @@ function detectExpiry(condition: string) {
 }
 
 export function PolicyDetail({ policy, onClose }: Props) {
+  const [copied, setCopied] = useState(false)
+  const [useFormatted, setUseFormatted] = useState(true)
+
+  const formattedCond = useMemo(() => {
+    if (!policy?.Condition) return ""
+    return formatCondition(policy.Condition)
+  }, [policy?.Condition])
+
   if (!policy) return null
 
   const enabled = policy.Enabled === 'true'
   const expiry = detectExpiry(policy.Condition || '')
+
+  const handleCopy = () => {
+    const textToCopy = useFormatted ? formattedCond : policy.Condition || ''
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   return (
     <div className={styles.drawer}>
@@ -41,8 +102,24 @@ export function PolicyDetail({ policy, onClose }: Props) {
 
         {policy.Condition && (
           <section className={styles.section}>
-            <div className={styles.label}>Condition</div>
-            <pre className={styles.cond}>{policy.Condition}</pre>
+            <div className={styles.sectionHeader}>
+              <div className={styles.label}>Condition</div>
+              <div className={styles.actions}>
+                <button 
+                  className={styles.miniBtn} 
+                  onClick={() => setUseFormatted(!useFormatted)}
+                >
+                  {useFormatted ? '원본 보기' : '포맷팅 보기'}
+                </button>
+                <button 
+                  className={styles.miniBtn} 
+                  onClick={handleCopy}
+                >
+                  {copied ? '✓ 복사됨' : '📋 복사'}
+                </button>
+              </div>
+            </div>
+            <pre className={styles.cond}>{useFormatted ? formattedCond : policy.Condition}</pre>
           </section>
         )}
 
